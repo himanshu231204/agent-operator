@@ -15,6 +15,7 @@ BrowserActionType = Literal[
     "select",
     "scroll",
     "wait",
+    "extract",
     "screenshot",
     "download",
     "new_tab",

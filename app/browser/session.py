@@ -11,6 +11,7 @@ this module only provides the session lifecycle and primitive actions
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
@@ -86,6 +87,53 @@ class BrowserSession:
             action="screenshot",
             url=self.page.url,
             details={"bytes": len(data)},
+        )
+
+    async def extract_text(self) -> BrowserActionResult:
+        text = await self.page.inner_text("body")
+        return BrowserActionResult(
+            success=True,
+            action="extract",
+            url=self.page.url,
+            details={"text": text[:5000]},
+        )
+
+    async def scroll(
+        self,
+        direction: Literal["up", "down", "left", "right"],
+        pixels: int,
+    ) -> BrowserActionResult:
+        dx, dy = 0, 0
+        match direction:
+            case "down":
+                dy = pixels
+            case "up":
+                dy = -pixels
+            case "right":
+                dx = pixels
+            case "left":
+                dx = -pixels
+        await self.page.evaluate(f"window.scrollBy({dx}, {dy})")
+        return BrowserActionResult(success=True, action="scroll", url=self.page.url)
+
+    async def wait_for_selector(
+        self,
+        strategy: SelectorStrategy,
+        value: str,
+        *,
+        role: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> BrowserActionResult:
+        try:
+            locator = resolve_locator(self.page, strategy, value, role=role)
+            await locator.wait_for(timeout=timeout_ms)
+        except Exception as exc:  # noqa: BLE001
+            raise BrowserError(
+                f"Wait for {value!r} via {strategy} timed out: {exc}",
+                context={"strategy": strategy, "target": value},
+            ) from exc
+        return BrowserActionResult(
+            success=True, action="wait", target=value, url=self.page.url
         )
 
     async def close(self) -> None:
