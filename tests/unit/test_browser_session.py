@@ -72,3 +72,17 @@ async def test_wait_for_selector_raises_browser_error(mock_page):
     session = _make_session(mock_page)
     with pytest.raises(BrowserError, match="timed out"):
         await session.wait_for_selector("text", "Submit", timeout_ms=100)
+
+
+async def test_extract_text_raises_browser_error(mock_page):
+    mock_page.inner_text = AsyncMock(side_effect=Exception("page crashed"))
+    session = _make_session(mock_page)
+    with pytest.raises(BrowserError, match="extract_text failed"):
+        await session.extract_text()
+
+
+async def test_scroll_raises_browser_error(mock_page):
+    mock_page.evaluate = AsyncMock(side_effect=Exception("frame detached"))
+    session = _make_session(mock_page)
+    with pytest.raises(BrowserError, match="scroll down"):
+        await session.scroll("down", 100)

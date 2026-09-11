@@ -90,7 +90,12 @@ class BrowserSession:
         )
 
     async def extract_text(self) -> BrowserActionResult:
-        text = await self.page.inner_text("body")
+        try:
+            text = await self.page.inner_text("body")
+        except Exception as exc:  # noqa: BLE001
+            raise BrowserError(
+                f"extract_text failed: {exc}", context={"url": self.page.url}
+            ) from exc
         return BrowserActionResult(
             success=True,
             action="extract",
@@ -113,7 +118,13 @@ class BrowserSession:
                 dx = pixels
             case "left":
                 dx = -pixels
-        await self.page.evaluate(f"window.scrollBy({dx}, {dy})")
+        try:
+            await self.page.evaluate(f"window.scrollBy({dx}, {dy})")
+        except Exception as exc:  # noqa: BLE001
+            raise BrowserError(
+                f"scroll {direction} {pixels}px failed: {exc}",
+                context={"direction": direction, "pixels": pixels},
+            ) from exc
         return BrowserActionResult(success=True, action="scroll", url=self.page.url)
 
     async def wait_for_selector(
