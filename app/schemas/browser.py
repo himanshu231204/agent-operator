@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -20,6 +20,7 @@ BrowserActionType = Literal[
     "download",
     "new_tab",
     "switch_tab",
+    "list_tabs",
 ]
 
 SelectorStrategy = Literal[
@@ -38,7 +39,7 @@ class BrowserActionResult(BaseModel):
     action: BrowserActionType
     target: str | None = None
     url: str | None = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     details: dict[str, Any] = Field(default_factory=dict)
 
 

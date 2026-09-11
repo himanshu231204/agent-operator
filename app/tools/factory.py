@@ -36,7 +36,7 @@ def build_registry(
 ) -> ToolRegistry:
     """Instantiate and register all built-in tools.
 
-    Pass *session_manager* to also register the 8 browser tools.
+    Pass *session_manager* to also register the 13 browser tools.
     """
     registry = ToolRegistry()
     for tool in [
@@ -59,11 +59,16 @@ def build_registry(
     if session_manager is not None:
         from app.tools.builtin.browser_toolkit import (
             BrowserClickTool,
+            BrowserDownloadTool,
             BrowserExtractTool,
             BrowserInspectTool,
+            BrowserListTabsTool,
             BrowserNavigateTool,
+            BrowserNewTabTool,
+            BrowserSelectTool,
             BrowserScreenshotTool,
             BrowserScrollTool,
+            BrowserSwitchTabTool,
             BrowserTypeTool,
             BrowserWaitTool,
         )
@@ -73,10 +78,15 @@ def build_registry(
             BrowserInspectTool(session_manager),
             BrowserClickTool(session_manager),
             BrowserTypeTool(session_manager),
+            BrowserSelectTool(session_manager),
             BrowserExtractTool(session_manager),
             BrowserScrollTool(session_manager),
             BrowserScreenshotTool(session_manager),
             BrowserWaitTool(session_manager),
+            BrowserDownloadTool(session_manager),
+            BrowserNewTabTool(session_manager),
+            BrowserSwitchTabTool(session_manager),
+            BrowserListTabsTool(session_manager),
         ]:
             registry.register(browser_tool)
 
