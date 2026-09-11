@@ -18,6 +18,8 @@ def test_build_registry_registers_all_tools() -> None:
         "shell_run",
         "web_search",
         "web_fetch",
+        "content_draft",    # Phase 5
+        "content_validate", # Phase 5
     }
     registered = set(registry.list_tools())
     assert expected == registered
@@ -47,3 +49,17 @@ def test_get_web_fetch_tool() -> None:
     registry = build_registry()
     tool = registry.get("web_fetch")
     assert isinstance(tool, WebFetchTool)
+
+
+def test_content_draft_in_registry() -> None:
+    from app.tools.builtin.content import ContentDraftTool
+
+    registry = build_registry()
+    assert isinstance(registry.get("content_draft"), ContentDraftTool)
+
+
+def test_content_validate_in_registry() -> None:
+    from app.tools.builtin.content import ContentValidateTool
+
+    registry = build_registry()
+    assert isinstance(registry.get("content_validate"), ContentValidateTool)
