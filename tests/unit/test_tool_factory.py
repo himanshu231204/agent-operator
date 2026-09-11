@@ -17,6 +17,7 @@ def test_build_registry_registers_all_tools() -> None:
         "folder_delete",
         "shell_run",
         "web_search",
+        "lang_search",
         "web_fetch",
         "content_draft",    # Phase 5
         "content_validate", # Phase 5
@@ -63,3 +64,26 @@ def test_content_validate_in_registry() -> None:
 
     registry = build_registry()
     assert isinstance(registry.get("content_validate"), ContentValidateTool)
+
+
+async def test_build_registry_with_browser_tools() -> None:
+    from unittest.mock import MagicMock
+
+    manager = MagicMock()
+    registry = build_registry(session_manager=manager)
+    for name in [
+        "browser_navigate",
+        "browser_inspect",
+        "browser_click",
+        "browser_type",
+        "browser_extract",
+        "browser_scroll",
+        "browser_screenshot",
+        "browser_wait",
+    ]:
+        assert name in registry, f"{name!r} not found in registry"
+
+
+def test_build_registry_without_browser_tools_has_no_browser_tools() -> None:
+    registry = build_registry()
+    assert "browser_navigate" not in registry

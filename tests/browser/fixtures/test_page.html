@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Agent Operator Test Page</title>
+</head>
+<body>
+  <h1>Test Page</h1>
+  <p id="intro">This page is used by Phase 3 browser integration tests.</p>
+  <button id="btn" onclick="document.getElementById('result').textContent='clicked'">
+    Click Me
+  </button>
+  <p id="result"></p>
+  <input id="name-input" aria-label="Your name" type="text" />
+  <p id="name-display"></p>
+  <script>
+    document.getElementById('name-input').addEventListener('input', function() {
+      document.getElementById('name-display').textContent = this.value;
+    });
+  </script>
+</body>
+</html>

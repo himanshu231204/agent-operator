@@ -41,4 +41,4 @@ jobs:
         env:
           APP_ENVIRONMENT: test
           SECURITY_SECRET_KEY: ci-secret-key
-        run: pytest tests/ -q
+        run: pytest tests/ -q -m "not browser"

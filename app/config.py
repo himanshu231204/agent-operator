@@ -58,6 +58,7 @@ class LLMProviderSettings(BaseSettings):
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
     tavily_api_key: str | None = None
+    langsearch_api_key: str | None = None
 
     #: Point at a self-hosted LiteLLM proxy ("omnirouter") instead of
     #: calling vendor APIs directly -- centralizes keys, budgets, and
