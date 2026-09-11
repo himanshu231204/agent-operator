@@ -45,7 +45,7 @@ from app.config import LimitSettings
 from app.db.models.agent_run import AgentRun
 from app.db.models.approval import Approval
 from app.db.models.task import Task
-from app.domain.state_machine import TaskState
+from app.domain.state_machine import TaskState, can_transition
 from app.errors import ApprovalRequiredError
 from app.errors import TimeoutError as OperatorTimeoutError
 from app.logging import get_logger
@@ -125,7 +125,12 @@ class Orchestrator:
             await self._walk_to(task_service, task_uuid, TaskState.COMPLETED)
             await self._persist_result(task_uuid, state)
         except ApprovalRequiredError as exc:
-            await task_service.transition_task(task_uuid, TaskState.WAITING_FOR_APPROVAL)
+            # _request_approval (via approval_service.create_approval) already
+            # transitions to WAITING_FOR_APPROVAL. The ESCALATE recovery path
+            # does not, so we only transition when still needed.
+            refreshed = await task_service.get_task(task_uuid)
+            if can_transition(TaskState(refreshed.state), TaskState.WAITING_FOR_APPROVAL):
+                await task_service.transition_task(task_uuid, TaskState.WAITING_FOR_APPROVAL)
             logger.info(
                 "orchestrator.paused_for_approval",
                 task_id=task_id,
@@ -140,7 +145,6 @@ class Orchestrator:
             logger.exception("orchestrator.failed", task_id=task_id)
             await task_service.transition_task(task_uuid, TaskState.FAILED)
             await self._persist_error(task_uuid, exc)
-            raise
 
         return state
 
