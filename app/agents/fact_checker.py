@@ -1,19 +1,10 @@
-"""Fact-checking agent placeholder (PROJECT.md section 17)."""
+"""Fact-checking agent (PROJECT.md section 17)."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.base import Agent, AgentDecision, AgentObservation, AgentResult
+from app.agents.tool_agent import ToolBackedAgent
 
 
-class FactCheckerAgent(Agent):
+class FactCheckerAgent(ToolBackedAgent):
     name = "fact_checker"
-
-    async def decide(
-        self, observation: AgentObservation, *, context: dict[str, Any] | None = None
-    ) -> AgentDecision:
-        raise NotImplementedError("FactCheckerAgent is not yet implemented")
-
-    async def act(self, decision: AgentDecision) -> AgentResult:
-        raise NotImplementedError("FactCheckerAgent is not yet implemented")
+    default_tool = "fact_check"

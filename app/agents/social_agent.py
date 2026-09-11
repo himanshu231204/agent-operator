@@ -1,24 +1,16 @@
-"""Social agent placeholder (PROJECT.md sections 18-20).
+"""Social agent (PROJECT.md sections 18-20).
 
-Drives ``app.social`` adapters. Real publishing is never triggered from
-here without a prior approved ``Approval`` record -- see
-``app.policies.approval``.
+Drives ``app.social`` adapters through tool wrappers. Publishing is a
+HIGH-risk action so the tool execution engine will refuse to run it until
+an approval covering the tool name is in the caller's
+:class:`~app.tools.executor.ExecutionContext` (AGENTS.md rule 161).
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.base import Agent, AgentDecision, AgentObservation, AgentResult
+from app.agents.tool_agent import ToolBackedAgent
 
 
-class SocialAgent(Agent):
+class SocialAgent(ToolBackedAgent):
     name = "social"
-
-    async def decide(
-        self, observation: AgentObservation, *, context: dict[str, Any] | None = None
-    ) -> AgentDecision:
-        raise NotImplementedError("SocialAgent is not yet implemented")
-
-    async def act(self, decision: AgentDecision) -> AgentResult:
-        raise NotImplementedError("SocialAgent is not yet implemented")
+    default_tool = "social_publish"

@@ -1,23 +1,15 @@
-"""Verification agent placeholder (PROJECT.md section 30).
+"""Verification agent (PROJECT.md section 30).
 
-Never assume a tool's success response means the external action actually
-happened -- this agent's job is to independently confirm it.
+Independently confirms an external action actually happened by running a
+verification tool through the audited engine; a 200 from the publish tool
+is never enough on its own.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.base import Agent, AgentDecision, AgentObservation, AgentResult
+from app.agents.tool_agent import ToolBackedAgent
 
 
-class VerificationAgent(Agent):
+class VerificationAgent(ToolBackedAgent):
     name = "verification"
-
-    async def decide(
-        self, observation: AgentObservation, *, context: dict[str, Any] | None = None
-    ) -> AgentDecision:
-        raise NotImplementedError("VerificationAgent is not yet implemented")
-
-    async def act(self, decision: AgentDecision) -> AgentResult:
-        raise NotImplementedError("VerificationAgent is not yet implemented")
+    default_tool = "verify_post"

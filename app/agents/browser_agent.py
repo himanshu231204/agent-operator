@@ -1,24 +1,16 @@
-"""Browser agent placeholder (PROJECT.md sections 11-13).
+"""Browser agent (PROJECT.md sections 11-13).
 
-Autonomous browser workflows are explicitly out of scope for this
-foundation. This class only defines the contract through which a future
-implementation will drive ``app.browser`` tools.
+Runs a single browser tool per step through the tool execution engine.
+Autonomous multi-step browser workflows remain scoped to Phase 3 -- this
+agent only guarantees every browser call goes through the permission-
+checked, audited engine.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.base import Agent, AgentDecision, AgentObservation, AgentResult
+from app.agents.tool_agent import ToolBackedAgent
 
 
-class BrowserAgent(Agent):
+class BrowserAgent(ToolBackedAgent):
     name = "browser"
-
-    async def decide(
-        self, observation: AgentObservation, *, context: dict[str, Any] | None = None
-    ) -> AgentDecision:
-        raise NotImplementedError("BrowserAgent autonomous workflows are not yet implemented")
-
-    async def act(self, decision: AgentDecision) -> AgentResult:
-        raise NotImplementedError("BrowserAgent autonomous workflows are not yet implemented")
+    default_tool = "browser_navigate"
