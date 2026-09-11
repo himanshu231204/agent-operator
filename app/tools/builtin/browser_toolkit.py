@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel
 
-from app.errors import BrowserError
 from app.policies.risk import RiskLevel
 from app.schemas.browser import BrowserActionResult, SelectorStrategy
 from app.tools.base import BaseTool, ToolPermissions

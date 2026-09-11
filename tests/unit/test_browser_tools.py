@@ -5,12 +5,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.errors import BrowserError
+from app.policies.risk import RiskLevel
 from app.schemas.browser import BrowserActionResult
 from app.tools.builtin.browser_toolkit import (
     BrowserClickInput,
     BrowserClickTool,
-    BrowserExtractTool,
     BrowserExtractInput,
+    BrowserExtractTool,
     BrowserInspectInput,
     BrowserInspectTool,
     BrowserNavigateInput,
@@ -19,12 +20,11 @@ from app.tools.builtin.browser_toolkit import (
     BrowserScreenshotTool,
     BrowserScrollInput,
     BrowserScrollTool,
-    BrowserTypeTool,
     BrowserTypeInput,
+    BrowserTypeTool,
     BrowserWaitInput,
     BrowserWaitTool,
 )
-from app.policies.risk import RiskLevel
 
 
 def _manager_with_session(session: MagicMock) -> MagicMock:
