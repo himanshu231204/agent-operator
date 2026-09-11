@@ -49,7 +49,7 @@ class LLMContentGenerator(ContentGenerator):
             HumanMessage(content=self._build_human_message(platform, topic, research)),
         ]
         response = await self._model.ainvoke(messages)
-        return response.content
+        return str(response.content)
 
     @staticmethod
     def _build_human_message(
