@@ -37,4 +37,4 @@ def test_high_risk_complex_task_routes_to_strongest_model():
 def test_selection_records_reasoning_and_provider():
     selection = make_router().route(RoutingCriteria())
     assert selection.reasoning
-    assert selection.provider == "openai"
+    assert selection.provider == "litellm"

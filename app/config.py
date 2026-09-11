@@ -10,8 +10,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# LiteLLM (and vendor SDKs it wraps) read provider API keys directly from
+# the process environment, not through pydantic-settings -- so .env must be
+# materialized into os.environ, not just parsed into the Settings model.
+load_dotenv()
 
 
 class ApplicationSettings(BaseSettings):
@@ -46,23 +52,39 @@ class LLMProviderSettings(BaseSettings):
 
     No single provider is required at import time; each is optional so the
     application can start without every key configured. Providers are only
-    exercised when a route actually needs them.
+    exercised when a route actually needs them. Model routing goes through
+    LiteLLM (see app.llm.providers.litellm_provider), which reads these same
+    variable names directly from the environment -- setting them here keeps
+    them documented and validated in one place.
     """
 
     model_config = SettingsConfigDict(env_prefix="")
 
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
+    openrouter_api_key: str | None = None
+
+    #: Point at a self-hosted LiteLLM proxy ("omnirouter") instead of
+    #: calling vendor APIs directly -- centralizes keys, budgets, and
+    #: cross-provider fallback routing behind one gateway.
+    litellm_api_base: str | None = None
+    litellm_api_key: str | None = None
 
 
 class ModelRoutingSettings(BaseSettings):
+    """Model names are LiteLLM model strings, e.g. ``"gpt-4o-mini"``,
+    ``"claude-3-5-sonnet-20241022"``, ``"gemini/gemini-1.5-pro"``, or
+    ``"openrouter/anthropic/claude-3.5-sonnet"`` -- any backend LiteLLM
+    supports, picked per model class independent of any other class."""
+
     model_config = SettingsConfigDict(env_prefix="MODEL_ROUTER_")
 
     fast_model: str = "gpt-4o-mini"
     tool_calling_model: str = "gpt-4o"
     reasoning_model: str = "gpt-4o"
     strongest_model: str = "gpt-4o"
-    default_provider: str = "openai"
+    default_provider: str = "litellm"
 
 
 class BrowserSettings(BaseSettings):
