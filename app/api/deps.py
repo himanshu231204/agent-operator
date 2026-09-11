@@ -18,6 +18,9 @@ from app.config import Settings, get_settings
 from app.db.session import get_db_session
 from app.services.approval_service import ApprovalService
 from app.services.task_service import TaskService
+from app.tools.executor import ToolExecutionEngine
+from app.tools.factory import build_registry, build_tool_engine
+from app.tools.registry import ToolRegistry
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -33,6 +36,21 @@ def get_approval_service(session: DbSessionDep) -> ApprovalService:
 
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 ApprovalServiceDep = Annotated[ApprovalService, Depends(get_approval_service)]
+
+
+def get_tool_registry() -> ToolRegistry:
+    return build_registry()
+
+
+def get_tool_engine(
+    session: DbSessionDep,
+    registry: Annotated[ToolRegistry, Depends(get_tool_registry)],
+) -> ToolExecutionEngine:
+    return build_tool_engine(registry, session)
+
+
+ToolRegistryDep = Annotated[ToolRegistry, Depends(get_tool_registry)]
+ToolEngineDep = Annotated[ToolExecutionEngine, Depends(get_tool_engine)]
 
 
 @lru_cache

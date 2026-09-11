@@ -13,10 +13,9 @@ from __future__ import annotations
 from langgraph.prebuilt import create_react_agent
 
 from app.agents.graphs._helpers import RESEARCH_CRITERIA, collect_tools, resolve_model
+from app.llm.router import ModelRouter
 from app.tools.executor import ExecutionContext, ToolExecutionEngine
 from app.tools.registry import ToolRegistry
-
-from app.llm.router import ModelRouter
 
 _SYSTEM_PROMPT = """\
 You are the Research Agent for Agent Operator.
@@ -59,5 +58,5 @@ def build_graph(
     return create_react_agent(
         model=model,
         tools=tools,
-        prompt=_SYSTEM_PROMPT,
+        state_modifier=_SYSTEM_PROMPT,
     )

@@ -54,5 +54,5 @@ def build_graph(
     return create_react_agent(
         model=model,
         tools=tools,
-        prompt=_SYSTEM_PROMPT,
+        state_modifier=_SYSTEM_PROMPT,
     )
