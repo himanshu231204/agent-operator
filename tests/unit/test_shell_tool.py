@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from app.tools.builtin.shell import ShellRunInput, ShellRunTool
+
 from app.errors import ToolError
+from app.tools.builtin.shell import ShellRunInput, ShellRunTool
 
 
 async def test_shell_run_captures_stdout():

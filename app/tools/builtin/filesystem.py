@@ -68,7 +68,7 @@ class FileReadTool(BaseTool[FileReadInput, FileReadOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
 
     async def execute(self, tool_input: FileReadInput) -> FileReadOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         if not path.exists():
             raise ToolError(f"File not found: {path}", context={"path": str(path)})
@@ -104,7 +104,7 @@ class FileWriteTool(BaseTool[FileWriteInput, FileWriteOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=False)
 
     async def execute(self, tool_input: FileWriteInput) -> FileWriteOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         created = not path.exists()
         if tool_input.create_parents:
@@ -139,7 +139,7 @@ class FileEditTool(BaseTool[FileEditInput, FileEditOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=False)
 
     async def execute(self, tool_input: FileEditInput) -> FileEditOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         if not path.exists():
             raise ToolError(f"File not found: {path}", context={"path": str(path)})
@@ -173,7 +173,7 @@ class FileDeleteTool(BaseTool[FileDeleteInput, FileDeleteOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.HIGH, requires_approval=True)
 
     async def execute(self, tool_input: FileDeleteInput) -> FileDeleteOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         if not path.exists():
             raise ToolError(f"File not found: {path}", context={"path": str(path)})
@@ -201,7 +201,7 @@ class FolderCreateTool(BaseTool[FolderCreateInput, FolderCreateOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
 
     async def execute(self, tool_input: FolderCreateInput) -> FolderCreateOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         created = not path.exists()
         path.mkdir(parents=True, exist_ok=tool_input.exist_ok)
@@ -228,7 +228,7 @@ class FolderListTool(BaseTool[FolderListInput, FolderListOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
 
     async def execute(self, tool_input: FolderListInput) -> FolderListOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         if not path.is_dir():
             raise ToolError(f"Not a directory: {path}", context={"path": str(path)})
@@ -266,7 +266,7 @@ class FolderDeleteTool(BaseTool[FolderDeleteInput, FolderDeleteOutput]):
     permissions = ToolPermissions(risk_level=RiskLevel.HIGH, requires_approval=True)
 
     async def execute(self, tool_input: FolderDeleteInput) -> FolderDeleteOutput:
-        path = Path(tool_input.path).resolve()
+        path = Path(tool_input.path).resolve()  # noqa: ASYNC240
         _guard_path(path)
         if not path.exists():
             raise ToolError(f"Directory not found: {path}", context={"path": str(path)})

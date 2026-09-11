@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+
+from app.errors import ToolError
 from app.tools.builtin.filesystem import (
     FileDeleteInput,
     FileDeleteTool,
@@ -18,8 +20,6 @@ from app.tools.builtin.filesystem import (
     FolderListTool,
     _guard_path,
 )
-from app.errors import ToolError
-
 
 # --- _guard_path ---
 

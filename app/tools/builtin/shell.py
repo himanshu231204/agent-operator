@@ -64,13 +64,13 @@ class ShellRunTool(BaseTool[ShellRunInput, ShellRunOutput]):
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(), timeout=tool_input.timeout_seconds
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.communicate()
             raise ToolError(
                 f"Command timed out after {tool_input.timeout_seconds}s",
                 context={"command": cmd},
-            )
+            ) from None
 
         return ShellRunOutput(
             stdout=stdout_bytes.decode(errors="replace"),

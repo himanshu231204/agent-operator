@@ -34,7 +34,7 @@ class ToolPermissions(BaseModel):
     supports_idempotency: bool = False
 
 
-class BaseTool(Generic[ToolInput, ToolOutput], ABC):
+class BaseTool(Generic[ToolInput, ToolOutput], ABC):  # noqa: UP046
     """Base class for every tool.
 
     Subclasses declare ``name``, ``description``, and ``permissions`` as
