@@ -1,5 +1,4 @@
 import pytest
-from pydantic import ValidationError
 from pydantic import ValidationError as PydanticValidationError
 
 from app.schemas.content import (
@@ -12,13 +11,13 @@ from app.schemas.task import TaskCreateRequest
 
 
 def test_task_create_request_rejects_empty_instruction():
-    with pytest.raises(ValidationError):
+    with pytest.raises(PydanticValidationError):
         TaskCreateRequest(instruction="")
 
 
 def test_claim_confidence_must_be_between_zero_and_one():
     source = Source(url="https://example.com", source_type="primary")
-    with pytest.raises(ValidationError):
+    with pytest.raises(PydanticValidationError):
         Claim(claim="x", source=source, evidence="y", confidence=1.5)
 
 
