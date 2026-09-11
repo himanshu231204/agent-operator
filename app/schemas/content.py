@@ -33,3 +33,48 @@ class ContentValidationIssue(BaseModel):
 class ContentValidationResult(BaseModel):
     valid: bool
     issues: list[ContentValidationIssue] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Tool I/O schemas (Phase 5)
+# ---------------------------------------------------------------------------
+
+TonePreference = Literal["professional", "technical", "educational", "casual"]
+
+
+class ContentDraftToolInput(BaseModel):
+    platform: Platform
+    content: str = Field(min_length=1)
+    tone: TonePreference = "professional"
+
+
+class ThreadPost(BaseModel):
+    index: int        # 1-based
+    total: int
+    content: str      # includes " i/N" suffix
+
+
+class ContentDraftToolOutput(BaseModel):
+    valid: bool
+    thread_posts: list[ThreadPost] = Field(default_factory=list)
+    issues: list[ContentValidationIssue] = Field(default_factory=list)
+    formatted_content: str   # final string (newline-joined posts for threads)
+
+
+class ContentValidateToolInput(BaseModel):
+    platform: Platform
+    content: str = Field(min_length=1)
+
+
+class ContentValidateToolOutput(BaseModel):
+    valid: bool
+    issues: list[ContentValidationIssue] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Draft update (Phase 5 PATCH route)
+# ---------------------------------------------------------------------------
+
+class DraftUpdateRequest(BaseModel):
+    content: str | None = None
+    status: Literal["draft", "approved", "published", "rejected"] | None = None
