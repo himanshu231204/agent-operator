@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -20,6 +20,9 @@ from app.logging import get_logger
 from app.policies.risk import RiskLevel
 
 logger = get_logger(__name__)
+
+ToolInput = TypeVar("ToolInput", bound=BaseModel)
+ToolOutput = TypeVar("ToolOutput", bound=BaseModel)
 
 
 class ToolPermissions(BaseModel):
@@ -31,7 +34,7 @@ class ToolPermissions(BaseModel):
     supports_idempotency: bool = False
 
 
-class BaseTool[ToolInput: BaseModel, ToolOutput: BaseModel](ABC):
+class BaseTool(Generic[ToolInput, ToolOutput], ABC):
     """Base class for every tool.
 
     Subclasses declare ``name``, ``description``, and ``permissions`` as
