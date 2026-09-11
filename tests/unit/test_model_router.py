@@ -34,7 +34,8 @@ def test_high_risk_complex_task_routes_to_strongest_model():
     assert selection.model_class == ModelClass.STRONGEST
 
 
-def test_selection_records_reasoning_and_provider():
+def test_selection_records_reasoning_and_provider(monkeypatch):
+    monkeypatch.delenv("MODEL_ROUTER_DEFAULT_PROVIDER", raising=False)
     selection = make_router().route(RoutingCriteria())
     assert selection.reasoning
     assert selection.provider == "litellm"
