@@ -38,7 +38,7 @@ Rules you must always follow:
 """
 
 # Tools this agent uses — registered in Phase 4.
-_TOOL_NAMES = ["web_search", "web_fetch"]
+_TOOL_NAMES = ["web_search", "lang_search", "web_fetch"]
 
 
 def build_graph(

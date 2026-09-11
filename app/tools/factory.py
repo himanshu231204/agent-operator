@@ -22,6 +22,7 @@ from app.tools.builtin.filesystem import (
     FolderDeleteTool,
     FolderListTool,
 )
+from app.tools.builtin.langsearch import LangSearchTool
 from app.tools.builtin.search import WebSearchTool
 from app.tools.builtin.shell import ShellRunTool
 from app.tools.executor import ToolExecutionEngine
@@ -41,6 +42,7 @@ def build_registry() -> ToolRegistry:
         FolderDeleteTool(),
         ShellRunTool(),
         WebSearchTool(),
+        LangSearchTool(),
         WebFetchTool(),
         ContentDraftTool(),
         ContentValidateTool(),
