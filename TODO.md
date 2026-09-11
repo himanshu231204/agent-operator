@@ -16,12 +16,30 @@ in `PROJECT.md` section 55, not just "the code runs once."
 ## Status
 
 - **Phase 1 — Foundation**: ✅ done (Python project, FastAPI, config, logging,
-  PostgreSQL, Redis, migrations, Docker).
+  PostgreSQL, migrations, Docker).
 - **Phase 2 — Agent Core**: ✅ done. Model router runs on **LiteLLM** via
   `langchain-litellm` (`ChatLiteLLM`). Orchestrator loop, tool execution
   engine (permission-checked, audited), planner with structured output,
   agent wiring, HITL approvals, and cost/usage hooks are in place. See
   "Decisions already made" below.
+- **Agent framework decision**: ✅ decided — **LangGraph** (`langgraph.prebuilt.create_react_agent`)
+  is the chosen approach for all specialized agents (Research, Browser, Content,
+  Fact Checker, Social, Verification). Each agent is a compiled LangGraph
+  **subgraph** with isolated `MessagesState` (context quarantine). The outer
+  orchestrator is a `StateGraph` that calls subgraphs per plan step.
+- **Checkpointing**: ✅ decided — `PostgresSaver` from `langgraph-checkpoint-postgres`
+  is the sole checkpointing backend; wired into `graph.compile(checkpointer=...)`.
+- **Built-in tools**: ✅ decided — `langchain-community` toolkits (TavilySearchResults,
+  PlaywrightBrowserToolkit, etc.) are the first choice for standard capabilities;
+  always wrapped through `ToolExecutionEngine`.
+- **Middleware**: ✅ decided — LangChain `BaseCallbackHandler` + `RunnableConfig`
+  is the instrumentation layer; LangSmith is the default backend.
+- **Memory**: ✅ decided — `MessagesState` in-graph, `ConversationSummaryMemory` /
+  vector store for cross-task recall.
+- **Skills**: ✅ decided — reusable packaged LangGraph subgraphs under `skills/`,
+  each with a `SKILL.md` contract, consumable via API or direct import.
+- **Observability backend**: ✅ decided — LangSmith via `BaseCallbackHandler`;
+  OTel export is a future option via a custom handler, not a parallel system.
 - **Phases 3–8**: not started.
 
 ---
@@ -76,6 +94,15 @@ in `PROJECT.md` section 55, not just "the code runs once."
 - [x] Unit + integration tests for the orchestrator loop: happy path,
   approval pause, resume after approval, max-iteration cutoff, recovery
   classification.
+- [ ] Add `langgraph`, `langgraph-checkpoint-postgres`, `langchain`,
+  `langchain-community` to `pyproject.toml` and verify dependency resolution.
+- [ ] Wire `AsyncPostgresSaver` into the orchestrator graph compilation
+  (`graph.compile(checkpointer=postgres_saver)`).
+- [ ] Implement a `BaseCallbackHandler` subclass for structured logging /
+  LangSmith tracing and inject it via `RunnableConfig` on every graph call.
+- [ ] Define and document the subgraph invocation contract: the typed input
+  dict the orchestrator passes to each subgraph and the typed output dict it
+  expects back (eliminates implicit message-history coupling).
 
 ## Phase 3 — Browser
 
@@ -91,10 +118,10 @@ in `PROJECT.md` section 55, not just "the code runs once."
 - [ ] Session isolation guarantees between concurrent tasks/users
   (AGENTS.md rule 88) — currently one shared `BrowserSessionManager`
   singleton; needs per-task/user scoping.
-- [ ] `BrowserAgent.decide`/`act`: turn planner steps into bounded
-  browser-tool call sequences (still explicitly **not** autonomous
-  multi-site workflows at this stage — keep scope narrow and test-page
-  driven per PROJECT.md section 47).
+- [ ] Browser subgraph (`app/agents/graphs/browser.py`): implement bounded
+  browser-tool call sequences within the `create_react_agent` ReAct loop
+  (still explicitly **not** autonomous multi-site workflows at this stage —
+  keep scope narrow and test-page driven per PROJECT.md section 47).
 - [ ] Browser tests against controlled local test pages (`tests/browser/`
   is empty) — never against live third-party sites in CI.
 
@@ -178,8 +205,8 @@ in `PROJECT.md` section 55, not just "the code runs once."
 - [ ] Timeouts: wire `LimitSettings.max_execution_seconds` into the
   orchestrator loop (currently only stored in config, not enforced).
 - [ ] Rate limiting: per-provider/per-tool throttling + concurrency limits
-  (AGENTS.md rules 185–186) — *needs a decision* on backend (Redis token
-  bucket vs a library).
+  (AGENTS.md rules 185–186) — use `slowapi` (in-process) for now; revisit
+  if multi-process workers are added.
 
 ## Phase 8 — Production Hardening
 
@@ -190,8 +217,8 @@ in `PROJECT.md` section 55, not just "the code runs once."
   existing `tenacity` dependency, applied to model calls, tool calls, and
   publish attempts.
 - [ ] Background worker (`app/workers/`, currently an empty placeholder) so
-  long-running tasks don't block a request — *needs a decision*: plain
-  asyncio worker polling Postgres/Redis vs Celery/RQ/Arq.
+  long-running tasks don't block a request — implement as a plain asyncio
+  loop polling PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`).
 - [ ] CLI (`PROJECT.md` section 37): `agent-operator task/research/
   draft-x/approve/status`, calling the same services as the API — no
   duplicated business logic.
@@ -200,7 +227,7 @@ in `PROJECT.md` section 55, not just "the code runs once."
 - [ ] Full test pyramid: `tests/browser/` and `tests/e2e/` are still empty
   directories; fill in per Phase 3/6 items above.
 - [ ] Deployment documentation: how to run this in a real environment
-  (managed Postgres/Redis, secrets, Playwright browser provisioning).
+  (managed Postgres, secrets, Playwright browser provisioning).
 - [ ] `CLAUDE.md`: referenced by `PROJECT.md` section 35 and `AGENTS.md`
   section 1 as a first-class doc; doesn't exist in the repo yet.
 - [ ] `skills/` packaging (PROJECT.md section 34): expose
@@ -215,19 +242,17 @@ in `PROJECT.md` section 55, not just "the code runs once."
 These materially affect architecture and are called out rather than
 silently decided:
 
-1. **Orchestration style** — a hand-rolled loop over `app.agents` vs
-   adopting LangGraph for the planner/orchestrator's branching and
-   checkpointing. LangGraph would replace parts of `app/agents/orchestrator.py`
-   and `app/domain/state_machine.py`'s runtime role (the state machine's
-   states themselves stay either way).
+1. ~~**Orchestration style**~~ — **resolved**: LangGraph `create_react_agent`
+   for all specialized agents. The outer orchestrator and task state machine
+   stay; individual agent `decide`/`act` stubs are replaced by compiled
+   LangGraph ReAct graphs.
 2. **Search provider** for Phase 4 (Tavily / Serper / Bing / Exa / other).
 3. **Credential storage** for OAuth tokens (X/LinkedIn) once real auth
    lands — encrypted DB column vs a secret manager (AWS Secrets Manager,
    Vault, etc.).
 4. **Background worker technology** — plain asyncio poller vs Celery/RQ/Arq.
-5. **Observability backend** — LangSmith vs OpenTelemetry vs both.
-6. **Rate-limiting backend** — Redis-based token bucket vs a library
-   (e.g. `slowapi`, `limits`).
+5. ~~**Observability backend**~~ — resolved: LangChain `BaseCallbackHandler` + LangSmith as the default backend; OTel export is a future option via a custom handler, not a parallel system.
+6. ~~**Rate-limiting backend**~~ — resolved: `slowapi` in-process for now; revisit if multi-worker deployment is added.
 
 Resolve each when its phase starts, not before — deciding early risks
 guessing wrong before the surrounding code exists to validate the choice.

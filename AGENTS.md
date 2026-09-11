@@ -19,25 +19,31 @@ AGENTS.md
 12. Use SQLAlchemy 2.x for database access.
 13. Use Alembic for migrations.
 14. Use PostgreSQL for durable state.
-15. Use Redis for queues, locks, caching, and ephemeral state.
+15. Use PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`) for task queuing and ephemeral coordination; no Redis dependency.
 16. Use AsyncIO for I/O-bound workflows.
 17. Use Playwright and Chromium for browser automation.
 18. Use Docker for reproducible environments.
 19. Use pytest for testing.
 20. Prefer dependency injection over global state.
 
-3. LangChain
+3. LangGraph
 
-21. Use the LangChain ecosystem for agent orchestration.
-22. Use LangChain model abstractions instead of vendor-specific model logic.
-23. Use LangChain-compatible tools with typed schemas.
-24. Use LangChain runnables where they simplify composition.
-25. Use callbacks/tracing interfaces for observability.
-26. Use LangChain-compatible agent state and checkpoints where appropriate.
-27. Use human-in-the-loop interrupts or equivalent approval mechanisms.
-28. Keep LangChain-specific code behind clear application boundaries.
-29. Do not couple the entire application to one model provider.
-30. Make model and tool implementations replaceable.
+21. Use LangGraph as the primary agent framework; use ``langgraph.prebuilt.create_react_agent`` to build every specialized agent.
+22. Each specialized agent (research, browser, content, fact_check, social, verification) is a compiled LangGraph subgraph with its own isolated ``MessagesState``; never share a ``MessagesState`` instance between two subgraph invocations.
+23. The orchestrator passes a structured input dict into each subgraph — not the orchestrator's own message history; receive only a structured result dict back. This is the context quarantine pattern.
+24. Use LangChain ``BaseChatModel`` abstractions instead of vendor-specific model logic; never import a provider SDK directly in agent code.
+25. Expose every agent capability as a ``langchain_core.tools.StructuredTool`` with a typed Pydantic args schema.
+26. Use ``langchain-community`` built-in tools and toolkits (TavilySearchResults, WikipediaQueryRun, PlaywrightBrowserToolkit, etc.) as the first choice for standard capabilities; always wrap them through ``to_langchain_tool()`` + ``ToolExecutionEngine`` — never call a community tool directly from a graph node.
+27. Route all tool calls through the ``ToolExecutionEngine``; never bypass permission enforcement inside a LangGraph node.
+28. Use ``PostgresSaver`` from ``langgraph-checkpoint-postgres`` as the sole checkpointing backend; inject it at ``graph.compile(checkpointer=postgres_saver)`` — never build a custom checkpoint store.
+29. Use LangGraph ``NodeInterrupt`` for human-in-the-loop approval pauses; never poll or block a thread while waiting.
+30. Use LangChain ``BaseCallbackHandler`` + ``RunnableConfig`` as the middleware layer for per-run tracing, token counting, and structured logging; never implement parallel instrumentation logic alongside callbacks.
+31. Use ``MessagesState`` as the in-graph memory model; use ``ConversationSummaryMemory`` or an external vector store for cross-task recall — never in-process shared state.
+32. Keep LangGraph-specific code (graph construction, state schemas, node definitions) behind ``app/agents/`` boundaries.
+33. Do not couple the orchestrator or services to one model provider; model selection lives in the router.
+34. Make individual agent subgraphs replaceable without modifying the orchestrator graph.
+35. Package reusable capabilities as skills under ``skills/``; each skill is a compiled subgraph with a ``SKILL.md`` contract (purpose, inputs, outputs, tools, permissions, safety constraints, examples, failure modes).
+36. Skills import only from ``app/tools`` and ``app/llm``; they must not depend on FastAPI, the database layer, or other skills.
 
 4. Model Routing
 
@@ -251,7 +257,7 @@ AGENTS.md
 196. Test idempotency.
 197. Test content validation.
 198. Test FastAPI endpoints.
-199. Test PostgreSQL and Redis integrations.
+199. Test PostgreSQL integrations.
 200. Test browser workflows with controlled pages.
 201. Test end-to-end approval workflows.
 202. Never use real production social accounts in automated tests.

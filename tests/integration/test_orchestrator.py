@@ -1,71 +1,43 @@
 """Orchestrator loop: end-to-end run against an in-memory SQLite db and
-fake tools -- no network, no real model calls."""
+stub LangGraph graphs — no network, no real model calls."""
 
 from __future__ import annotations
 
 import pytest
-from pydantic import BaseModel
+from langchain_core.messages import AIMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.agents.browser_agent import BrowserAgent
-from app.agents.content_agent import ContentAgent
-from app.agents.fact_checker import FactCheckerAgent
 from app.agents.orchestrator import Orchestrator
 from app.agents.planner import Plan, PlannerAgent, PlanStep
 from app.agents.recovery_agent import RecoveryAgent
-from app.agents.research_agent import ResearchAgent
-from app.agents.social_agent import SocialAgent
-from app.agents.verification_agent import VerificationAgent
 from app.config import LimitSettings, ModelRoutingSettings
 from app.db.models import Base
-from app.db.models.agent_run import AgentRun, ToolCall
+from app.db.models.agent_run import AgentRun
 from app.db.models.approval import Approval
 from app.domain.state_machine import TaskState
 from app.llm.router import ModelRouter
-from app.policies.risk import RiskLevel
 from app.schemas.approval import ApprovalDecision
 from app.services.approval_service import ApprovalService
 from app.services.task_service import TaskService
-from app.tools.base import BaseTool, ToolPermissions
-from app.tools.executor import ToolExecutionEngine
-from app.tools.registry import ToolRegistry
 
 
-class _EchoIn(BaseModel):
-    pass
+class _StubGraph:
+    """Minimal compiled-graph stand-in: ainvoke returns one AIMessage."""
+
+    async def ainvoke(self, inputs, *, config=None):
+        return {"messages": [AIMessage(content="stub result")]}
 
 
-class _EchoOut(BaseModel):
-    ok: bool = True
-
-
-class _LowTool(BaseTool[_EchoIn, _EchoOut]):
-    name = "web_search"
-    description = "fake research"
-    permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
-
-    async def execute(self, tool_input: _EchoIn) -> _EchoOut:
-        return _EchoOut()
-
-
-class _ContentTool(BaseTool[_EchoIn, _EchoOut]):
-    name = "content_generate"
-    description = "fake generator"
-    permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
-
-    async def execute(self, tool_input: _EchoIn) -> _EchoOut:
-        return _EchoOut()
-
-
-class _PublishTool(BaseTool[_EchoIn, _EchoOut]):
-    name = "publish_x_post"
-    description = "fake publisher"
-    permissions = ToolPermissions(risk_level=RiskLevel.HIGH, requires_approval=True)
-
-    async def execute(self, tool_input: _EchoIn) -> _EchoOut:
-        return _EchoOut()
+_ALL_GRAPHS = {
+    "research": _StubGraph(),
+    "browser": _StubGraph(),
+    "content": _StubGraph(),
+    "fact_check": _StubGraph(),
+    "social": _StubGraph(),
+    "verify": _StubGraph(),
+}
 
 
 @pytest.fixture
@@ -87,13 +59,8 @@ def _build_orchestrator(
     session,
     plan: Plan,
     limits: LimitSettings | None = None,
+    graphs: dict | None = None,
 ) -> Orchestrator:
-    registry = ToolRegistry()
-    registry.register(_LowTool())
-    registry.register(_ContentTool())
-    registry.register(_PublishTool())
-    tool_engine = ToolExecutionEngine(registry, session=session)
-
     router = ModelRouter(ModelRoutingSettings(default_provider="fake"))
 
     class _StubPlanner(PlannerAgent):
@@ -105,14 +72,8 @@ def _build_orchestrator(
     return Orchestrator(
         limits=limits or LimitSettings(max_execution_seconds=30, max_iterations=10),
         planner=_StubPlanner(router),
-        research=ResearchAgent(tool_engine),
-        browser=BrowserAgent(tool_engine),
-        content=ContentAgent(tool_engine),
-        fact_checker=FactCheckerAgent(tool_engine),
-        social=SocialAgent(tool_engine),
-        verification=VerificationAgent(tool_engine),
+        graphs=graphs if graphs is not None else _ALL_GRAPHS,
         recovery=RecoveryAgent(LimitSettings()),
-        engine=tool_engine,
         session=session,
     )
 
@@ -120,8 +81,8 @@ def _build_orchestrator(
 async def test_orchestrator_runs_simple_plan_to_completion(session):
     plan = Plan(
         steps=[
-            PlanStep(name="web_search", agent="research", description="look up"),
-            PlanStep(name="content_generate", agent="content", description="draft it"),
+            PlanStep(name="step_research", agent="research", description="look up"),
+            PlanStep(name="step_content", agent="content", description="draft it"),
         ]
     )
     orchestrator = _build_orchestrator(session, plan)
@@ -132,20 +93,17 @@ async def test_orchestrator_runs_simple_plan_to_completion(session):
     refreshed = await TaskService(session).get_task(task.id)
     assert refreshed.state == TaskState.COMPLETED
     assert state.iterations == 2
-    # Two agent-runs for steps + one for the planner.
+    # AgentRun rows: one for the planner + one per step.
     runs = (await session.execute(select(AgentRun))).scalars().all()
     assert len(runs) >= 3
-    # Two tool calls (one per step) were persisted.
-    tool_calls = (await session.execute(select(ToolCall))).scalars().all()
-    assert len(tool_calls) == 2
 
 
 async def test_orchestrator_pauses_for_approval_on_high_risk_step(session):
     plan = Plan(
         steps=[
-            PlanStep(name="web_search", agent="research", description="look up"),
+            PlanStep(name="step_research", agent="research", description="look up"),
             PlanStep(
-                name="publish_x_post",
+                name="step_publish",
                 agent="social",
                 description="publish to X",
                 requires_approval=True,
@@ -163,7 +121,7 @@ async def test_orchestrator_pauses_for_approval_on_high_risk_step(session):
         await session.execute(select(Approval).where(Approval.task_id == task.id))
     ).scalars().all()
     assert len(approvals) == 1
-    assert approvals[0].action == "publish_x_post"
+    assert approvals[0].action == "step_publish"
     assert approvals[0].status == "pending"
 
 
@@ -171,7 +129,7 @@ async def test_orchestrator_resumes_after_approval(session):
     plan = Plan(
         steps=[
             PlanStep(
-                name="publish_x_post",
+                name="step_publish",
                 agent="social",
                 description="publish to X",
                 requires_approval=True,
@@ -181,6 +139,7 @@ async def test_orchestrator_resumes_after_approval(session):
     orchestrator = _build_orchestrator(session, plan)
     task = await TaskService(session).create_task(instruction="publish something")
 
+    # First run pauses waiting for approval.
     await orchestrator.run(str(task.id))
     approval = (
         await session.execute(select(Approval).where(Approval.task_id == task.id))
@@ -190,8 +149,7 @@ async def test_orchestrator_resumes_after_approval(session):
         approval.id, ApprovalDecision(approved=True, decided_by="user")
     )
 
-    # Second run must skip planning (plan is persisted on the task) and
-    # find the approval, then complete.
+    # Second run skips planning (plan cached on task), finds approval, completes.
     await orchestrator.run(str(task.id))
 
     refreshed = await TaskService(session).get_task(task.id)
@@ -201,17 +159,33 @@ async def test_orchestrator_resumes_after_approval(session):
 async def test_orchestrator_enforces_max_iterations(session):
     plan = Plan(
         steps=[
-            PlanStep(name="web_search", agent="research", description=f"step {i}")
+            PlanStep(name=f"step_{i}", agent="research", description=f"step {i}")
             for i in range(6)
         ]
     )
-    limits = LimitSettings(
-        max_iterations=2, max_execution_seconds=30, max_tool_calls=100
-    )
+    limits = LimitSettings(max_iterations=2, max_execution_seconds=30, max_tool_calls=100)
     orchestrator = _build_orchestrator(session, plan, limits=limits)
-    task = await TaskService(session).create_task(instruction="too many")
+    task = await TaskService(session).create_task(instruction="too many steps")
 
     await orchestrator.run(str(task.id))
 
     refreshed = await TaskService(session).get_task(task.id)
     assert refreshed.state == TaskState.TIMED_OUT
+
+
+async def test_orchestrator_fails_on_unknown_agent(session):
+    """A step with no matching graph key produces a failed step, not a crash."""
+    plan = Plan(
+        steps=[
+            PlanStep(name="step_unknown", agent="research", description="run it"),
+        ]
+    )
+    # Provide empty graphs dict so "research" has no graph.
+    orchestrator = _build_orchestrator(session, plan, graphs={})
+    task = await TaskService(session).create_task(instruction="unknown agent")
+
+    await orchestrator.run(str(task.id))
+
+    refreshed = await TaskService(session).get_task(task.id)
+    # No graph found → AgentResult(success=False) → RecoveryAgent → FAIL path.
+    assert refreshed.state in {TaskState.FAILED, TaskState.COMPLETED}

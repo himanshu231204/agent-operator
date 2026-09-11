@@ -26,7 +26,7 @@ from app.policies.risk import RiskLevel
 logger = get_logger(__name__)
 
 
-StepKind = Literal["research", "browser", "content", "fact_check", "social", "verify"]
+StepKind = Literal["research", "browser", "content", "fact_check", "social", "verify", "local_system"]
 
 
 class PlanStep(BaseModel):

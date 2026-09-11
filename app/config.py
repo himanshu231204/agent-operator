@@ -1,6 +1,6 @@
 """Strongly typed application configuration.
 
-Settings are grouped by category (application, database, redis, LLM providers,
+Settings are grouped by category (application, database, LLM providers,
 model routing, browser, social integrations, security, logging, limits) per
 PROJECT.md section 38. All configuration is sourced from environment
 variables / a local .env file and never hard-coded.
@@ -38,13 +38,6 @@ class DatabaseSettings(BaseSettings):
     pool_size: int = 5
     max_overflow: int = 10
     echo: bool = False
-
-
-class RedisSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="REDIS_")
-
-    url: str = "redis://localhost:6379/0"
-    max_connections: int = 10
 
 
 class LLMProviderSettings(BaseSettings):
@@ -143,7 +136,6 @@ class Settings(BaseSettings):
 
     application: ApplicationSettings = Field(default_factory=ApplicationSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    redis: RedisSettings = Field(default_factory=RedisSettings)
     llm: LLMProviderSettings = Field(default_factory=LLMProviderSettings)
     model_routing: ModelRoutingSettings = Field(default_factory=ModelRoutingSettings)
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
