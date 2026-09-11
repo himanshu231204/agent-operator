@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from langgraph.prebuilt import create_react_agent
 
 from app.agents.graphs._helpers import BROWSER_CRITERIA, collect_tools, resolve_model
-from app.tools.executor import ToolExecutionEngine
 from app.tools.factory import build_registry
 
 if TYPE_CHECKING:
@@ -62,6 +61,8 @@ def build_skill(
     Builds its own isolated registry (browser tools only) and engine so the
     skill has no dependency on any caller-provided registry.
     """
+    from app.tools.executor import ToolExecutionEngine
+
     registry = build_registry(session_manager=session_manager)
     engine = ToolExecutionEngine(registry=registry)
     model = resolve_model(router, BROWSER_CRITERIA)
