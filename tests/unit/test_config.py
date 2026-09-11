@@ -1,7 +1,8 @@
 from app.config import get_settings
 
 
-def test_settings_load_with_defaults():
+def test_settings_load_with_defaults(monkeypatch):
+    monkeypatch.delenv("MODEL_ROUTER_DEFAULT_PROVIDER", raising=False)
     get_settings.cache_clear()
     settings = get_settings()
 

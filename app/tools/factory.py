@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.tools.builtin.content import ContentDraftTool, ContentValidateTool
 from app.tools.builtin.fetch import WebFetchTool
 from app.tools.builtin.filesystem import (
     FileDeleteTool,
@@ -41,6 +42,8 @@ def build_registry() -> ToolRegistry:
         ShellRunTool(),
         WebSearchTool(),
         WebFetchTool(),
+        ContentDraftTool(),
+        ContentValidateTool(),
     ]:
         registry.register(tool)
     return registry
