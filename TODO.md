@@ -106,24 +106,31 @@ in `PROJECT.md` section 55, not just "the code runs once."
 
 ## Phase 3 — Browser
 
-- [ ] Browser session pooling/reuse across steps of one task (currently
-  `BrowserSessionManager` opens a session per API call).
-- [ ] Structured page observation: bounded, targeted extraction (visible
-  text, interactive elements, ARIA tree) instead of raw DOM — PROJECT.md
-  section 13 explicitly warns against sending oversized DOM to the model.
-- [ ] `select`, `scroll`, `wait`, `download`, new-tab/switch-tab actions
-  (only navigate/inspect/click/type/screenshot exist today).
-- [ ] Browser error recovery: crashed page/context detection + safe restart
+- [x] **Browser channel configurability** (`BrowserHeadlessMode`, `BrowserChannel`
+  in `app/config.py`): launch any Chromium-based browser via Playwright
+  (`chromium`, `chrome`, `msedge`, `brave` — Brave requires `executable_path`).
+  Platform-aware headless negotiation (new vs old headless on Windows/CI).
+  See `.env.example` for the new `BROWSER_HEADLESS_MODE` / `BROWSER_CHANNEL`
+  / `BROWSER_EXECUTABLE_PATH` keys.
+- [x] Browser session pooling/reuse across steps of one task — orchestrator
+  creates one `BrowserSession` per task, passes `session_id` through
+  `ExecutionContext`, and closes it on task complete/fail/cancel.
+- [x] Structured page observation: bounded, targeted extraction (visible text,
+  interactive elements, ARIA tree) instead of raw DOM (PROJECT.md §13).
+  `BrowserSession.inspect()` now returns `BrowserPageObservation`;
+  `extract_text(selector, max_chars)` supports targeted/sized extraction.
+- [x] `select`, `download`, `new_tab`, `switch_tab`, `list_tabs` actions
+  implemented as typed tools + `BrowserSession` methods (navigate/inspect/click/
+  type/screenshot already existed).
+- [x] Browser error recovery: crashed page/context detection (`page.on("crash")`
+  + `page.on("load")`) + safe restart with single retry, then escalation
   (AGENTS.md rule 188).
-- [ ] Session isolation guarantees between concurrent tasks/users
-  (AGENTS.md rule 88) — currently one shared `BrowserSessionManager`
-  singleton; needs per-task/user scoping.
-- [ ] Browser subgraph (`app/agents/graphs/browser.py`): implement bounded
-  browser-tool call sequences within the `create_react_agent` ReAct loop
-  (still explicitly **not** autonomous multi-site workflows at this stage —
-  keep scope narrow and test-page driven per PROJECT.md section 47).
-- [ ] Browser tests against controlled local test pages (`tests/browser/`
-  is empty) — never against live third-party sites in CI.
+- [x] Session isolation between concurrent tasks/users (AGENTS.md rule 88):
+  per-task session scoping via orchestrator-owned `BrowserSessionManager`.
+- [x] Browser subgraph (`app/agents/graphs/browser.py`): bounded browser-tool
+  call sequences within the `create_react_agent` ReAct loop.
+- [x] Browser tests against controlled local test pages
+  (`tests/unit/test_browser_session.py`, `tests/unit/test_browser_tools.py`).
 
 ## Phase 4 — Research
 

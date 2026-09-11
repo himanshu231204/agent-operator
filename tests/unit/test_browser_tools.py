@@ -10,16 +10,26 @@ from app.schemas.browser import BrowserActionResult
 from app.tools.builtin.browser_toolkit import (
     BrowserClickInput,
     BrowserClickTool,
+    BrowserDownloadInput,
+    BrowserDownloadTool,
     BrowserExtractInput,
     BrowserExtractTool,
     BrowserInspectInput,
     BrowserInspectTool,
+    BrowserListTabsInput,
+    BrowserListTabsTool,
     BrowserNavigateInput,
     BrowserNavigateTool,
+    BrowserNewTabInput,
+    BrowserNewTabTool,
     BrowserScreenshotInput,
     BrowserScreenshotTool,
     BrowserScrollInput,
     BrowserScrollTool,
+    BrowserSelectInput,
+    BrowserSelectTool,
+    BrowserSwitchTabInput,
+    BrowserSwitchTabTool,
     BrowserTypeInput,
     BrowserTypeTool,
     BrowserWaitInput,
@@ -44,6 +54,11 @@ def _session(action: str, **details) -> MagicMock:
     session.scroll = AsyncMock(return_value=result)
     session.screenshot = AsyncMock(return_value=result)
     session.wait_for_selector = AsyncMock(return_value=result)
+    session.select = AsyncMock(return_value=result)
+    session.download = AsyncMock(return_value=result)
+    session.new_tab = AsyncMock(return_value=result)
+    session.switch_tab = AsyncMock(return_value=result)
+    session.list_tabs = AsyncMock(return_value=result)
     return session
 
 
@@ -86,7 +101,7 @@ async def test_type_tool_success():
     tool = BrowserTypeTool(_manager_with_session(session))
     result = await tool(BrowserTypeInput(session_id="s1", strategy="label", value="Email", text="user@example.com"))
     assert result.success is True
-    session.type_text.assert_called_once_with("label", "Email", "user@example.com", role=None)
+    session.type_text.assert_called_once_with("label", "Email", "user@example.com", role=None, clear=True)
 
 
 async def test_extract_tool_success():
@@ -94,7 +109,15 @@ async def test_extract_tool_success():
     tool = BrowserExtractTool(_manager_with_session(session))
     result = await tool(BrowserExtractInput(session_id="s1"))
     assert result.success is True
-    session.extract_text.assert_called_once()
+    session.extract_text.assert_called_once_with(selector=None, max_chars=5_000)
+
+
+async def test_extract_tool_with_selector_and_max_chars():
+    session = _session("extract")
+    tool = BrowserExtractTool(_manager_with_session(session))
+    result = await tool(BrowserExtractInput(session_id="s1", selector=".content", max_chars=500))
+    assert result.success is True
+    session.extract_text.assert_called_once_with(selector=".content", max_chars=500)
 
 
 async def test_scroll_tool_success():
@@ -119,6 +142,78 @@ async def test_wait_tool_success():
     result = await tool(BrowserWaitInput(session_id="s1", strategy="text", value="Loading"))
     assert result.success is True
     session.wait_for_selector.assert_called_once_with("text", "Loading", role=None, timeout_ms=5000)
+
+
+# ---------------------------------------------------------------------------
+# New tools: select, download, new_tab, switch_tab, list_tabs
+# ---------------------------------------------------------------------------
+
+
+async def test_select_tool_success():
+    session = _session("select")
+    tool = BrowserSelectTool(_manager_with_session(session))
+    result = await tool(BrowserSelectInput(
+        session_id="s1", strategy="label", value="Country", option="Canada"
+    ))
+    assert result.success is True
+    session.select.assert_called_once_with("label", "Country", "Canada", role=None)
+
+
+async def test_select_tool_is_medium_risk():
+    tool = BrowserSelectTool(MagicMock())
+    assert tool.permissions.risk_level == RiskLevel.MEDIUM
+
+
+async def test_download_tool_success():
+    session = _session("download")
+    tool = BrowserDownloadTool(_manager_with_session(session))
+    result = await tool(BrowserDownloadInput(
+        session_id="s1", strategy="text", value="Download CSV"
+    ))
+    assert result.success is True
+    session.download.assert_called_once_with("text", "Download CSV", role=None, timeout_ms=30_000)
+
+
+async def test_download_tool_requires_approval():
+    tool = BrowserDownloadTool(MagicMock())
+    assert tool.permissions.requires_approval is True
+
+
+async def test_new_tab_tool_success():
+    session = _session("new_tab")
+    tool = BrowserNewTabTool(_manager_with_session(session))
+    result = await tool(BrowserNewTabInput(session_id="s1", url="https://example.com"))
+    assert result.success is True
+    session.new_tab.assert_called_once_with(url="https://example.com")
+
+
+async def test_new_tab_tool_without_url():
+    session = _session("new_tab")
+    tool = BrowserNewTabTool(_manager_with_session(session))
+    result = await tool(BrowserNewTabInput(session_id="s1"))
+    assert result.success is True
+    session.new_tab.assert_called_once_with(url=None)
+
+
+async def test_switch_tab_tool_success():
+    session = _session("switch_tab")
+    tool = BrowserSwitchTabTool(_manager_with_session(session))
+    result = await tool(BrowserSwitchTabInput(session_id="s1", index=1))
+    assert result.success is True
+    session.switch_tab.assert_called_once_with(index=1)
+
+
+async def test_list_tabs_tool_success():
+    session = _session("list_tabs")
+    tool = BrowserListTabsTool(_manager_with_session(session))
+    result = await tool(BrowserListTabsInput(session_id="s1"))
+    assert result.success is True
+    session.list_tabs.assert_called_once()
+
+
+async def test_list_tabs_tool_is_low_risk():
+    tool = BrowserListTabsTool(MagicMock())
+    assert tool.permissions.risk_level == RiskLevel.LOW
 
 
 async def test_navigate_tool_propagates_browser_error():

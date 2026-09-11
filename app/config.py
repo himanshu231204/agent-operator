@@ -9,6 +9,7 @@ variables / a local .env file and never hard-coded.
 from __future__ import annotations
 
 from functools import lru_cache
+from enum import StrEnum
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -82,10 +83,44 @@ class ModelRoutingSettings(BaseSettings):
     default_provider: str = "litellm"
 
 
+class BrowserHeadlessMode(StrEnum):
+    """Headless launch mode for Chromium-based browsers via Playwright.
+
+    ``new`` (headless=new) — modern headless, faster, less detectable as bot.
+    ``old`` (headless=old) — legacy headless, more compatible with stubborn
+    sites that detect headless=new.
+    ``false`` — visible/headed browser (for local development or when visuals
+    are needed).
+    """
+
+    new = "new"
+    old = "old"
+    false = "false"
+
+
+class BrowserChannel(StrEnum):
+    """Chromium-based browser channels Playwright can launch.
+
+    - ``chromium`` — bundled Chromium (default, always available).
+    - ``chrome`` — Google Chrome installed on the system.
+    - ``msedge`` — Microsoft Edge.
+    - ``brave`` — Brave Browser (requires ``executable_path`` since Playwright
+      does not auto-discover Brave's binary on all platforms).
+    """
+
+    chromium = "chromium"
+    chrome = "chrome"
+    msedge = "msedge"
+    brave = "brave"
+
+
 class BrowserSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="BROWSER_")
 
     headless: bool = True
+    headless_mode: BrowserHeadlessMode = BrowserHeadlessMode.new
+    channel: BrowserChannel = BrowserChannel.chromium
+    executable_path: str | None = None
     default_timeout_ms: int = 30_000
     navigation_timeout_ms: int = 30_000
     user_data_dir: str | None = None

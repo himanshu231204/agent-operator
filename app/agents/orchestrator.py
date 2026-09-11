@@ -30,7 +30,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -41,7 +41,7 @@ from app.agents.base import AgentObservation, AgentResult
 from app.agents.callbacks import OperatorCallbackHandler
 from app.agents.planner import Plan, PlannerAgent, PlanStep
 from app.agents.recovery_agent import RecoveryAction, RecoveryAgent
-from app.config import LimitSettings
+from app.config import BrowserSettings, LimitSettings
 from app.db.models.agent_run import AgentRun
 from app.db.models.approval import Approval
 from app.db.models.task import Task
@@ -53,6 +53,9 @@ from app.policies.approval import build_approval_request
 from app.policies.risk import RiskLevel
 from app.services.approval_service import ApprovalService
 from app.services.task_service import TaskService
+
+if TYPE_CHECKING:
+    from app.browser.session import BrowserSessionManager
 
 logger = get_logger(__name__)
 
@@ -91,9 +94,11 @@ class Orchestrator:
 
     limits: LimitSettings
     planner: PlannerAgent
-    graphs: dict[str, Any]  # str -> CompiledGraph (typed as Any to avoid langgraph import at module level)
+    graphs: dict[str, Any]  # str -> CompiledGraph (typed as Any to avoid langchain import at module level)
     recovery: RecoveryAgent
     session: AsyncSession
+    browser_manager: BrowserSessionManager | None = None
+    browser_settings: BrowserSettings | None = None
 
     async def run(self, task_id: str) -> OrchestratorState:
         task_uuid = uuid.UUID(task_id)
@@ -112,18 +117,24 @@ class Orchestrator:
         approved_actions = await self._approved_actions_for(task_uuid)
 
         try:
-            await self._walk_to(task_service, task_uuid, TaskState.EXECUTING)
-            await self._execute_plan(
-                task_id=task_uuid,
-                plan=state.plan,
-                state=state,
-                task_service=task_service,
-                approval_service=approval_service,
-                approved_actions=frozenset(approved_actions),
-            )
-            await self._walk_to(task_service, task_uuid, TaskState.VERIFYING)
-            await self._walk_to(task_service, task_uuid, TaskState.COMPLETED)
-            await self._persist_result(task_uuid, state)
+            # Open a browser session if any plan step uses the browser agent.
+            browser_session_id = await self._open_browser_session_if_needed(state.plan)
+            try:
+                await self._walk_to(task_service, task_uuid, TaskState.EXECUTING)
+                await self._execute_plan(
+                    task_id=task_uuid,
+                    plan=state.plan,
+                    state=state,
+                    task_service=task_service,
+                    approval_service=approval_service,
+                    approved_actions=frozenset(approved_actions),
+                    browser_session_id=browser_session_id,
+                )
+                await self._walk_to(task_service, task_uuid, TaskState.VERIFYING)
+                await self._walk_to(task_service, task_uuid, TaskState.COMPLETED)
+                await self._persist_result(task_uuid, state)
+            finally:
+                await self._close_browser_session(browser_session_id)
         except ApprovalRequiredError as exc:
             # _request_approval (via approval_service.create_approval) already
             # transitions to WAITING_FOR_APPROVAL. The ESCALATE recovery path
@@ -186,6 +197,7 @@ class Orchestrator:
         task_service: TaskService,
         approval_service: ApprovalService,
         approved_actions: frozenset[str],
+        browser_session_id: str | None = None,
     ) -> None:
         for index, step in enumerate(plan.steps):
             state.step_index = index
@@ -208,6 +220,7 @@ class Orchestrator:
                 step=step,
                 state=state,
                 approved_actions=approved_actions,
+                browser_session_id=browser_session_id,
             )
             state.step_outputs.append(
                 {"step": step.name, "agent": step.agent, "success": result.success}
@@ -221,6 +234,7 @@ class Orchestrator:
         step: PlanStep,
         state: OrchestratorState,
         approved_actions: frozenset[str],
+        browser_session_id: str | None = None,
     ) -> AgentResult:
         retry_count = 0
         while True:
@@ -229,6 +243,7 @@ class Orchestrator:
                 task_id=task_id,
                 step=step,
                 approved_actions=approved_actions,
+                browser_session_id=browser_session_id,
             )
             state.tool_call_count += 1
 
@@ -258,6 +273,7 @@ class Orchestrator:
         task_id: uuid.UUID,
         step: PlanStep,
         approved_actions: frozenset[str],
+        browser_session_id: str | None = None,
     ) -> AgentResult:
         """Invoke the compiled LangGraph subgraph for *step* in isolation.
 
@@ -276,8 +292,11 @@ class Orchestrator:
 
         # Unique thread per step — prevents checkpoint state bleed.
         thread_id = f"{task_id}:{step.name}:{run.id}"
+        configurable: dict[str, Any] = {"thread_id": thread_id}
+        if browser_session_id is not None:
+            configurable["browser_session_id"] = browser_session_id
         config = RunnableConfig(
-            configurable={"thread_id": thread_id},
+            configurable=configurable,
             callbacks=[OperatorCallbackHandler(task_id=task_id)],
         )
 
@@ -304,6 +323,38 @@ class Orchestrator:
             )
             await self._finish_agent_run(run, status="failed", error=error_msg)
             return AgentResult(success=False, error=error_msg)
+
+    # ------------------------------------------------------------------
+    # Browser session lifecycle
+    # ------------------------------------------------------------------
+
+    async def _open_browser_session_if_needed(self, plan: Plan) -> str | None:
+        """Open a browser session if the plan includes browser steps.
+
+        Returns the session_id or None. The session is scoped to this task
+        and shared across browser steps within it (AGEMS.md rule 88 —
+        per-task isolation). Cleaned up in ``_close_browser_session``.
+        """
+        if self.browser_manager is None or self.browser_settings is None:
+            return None
+        has_browser_steps = any(step.agent == "browser" for step in plan.steps)
+        if not has_browser_steps:
+            return None
+        await self.browser_manager.start()
+        session = await self.browser_manager.open_session()
+        logger.info(
+            "orchestrator.browser_session_opened",
+            session_id=session.session_id,
+        )
+        return session.session_id
+
+    async def _close_browser_session(self, session_id: str | None) -> None:
+        """Close a browser session opened for this task."""
+        if session_id is None or self.browser_manager is None:
+            return
+        await self.browser_manager.close_session(session_id)
+        await self.browser_manager.stop()
+        logger.info("orchestrator.browser_session_closed", session_id=session_id)
 
     # ------------------------------------------------------------------
     # Limit enforcement

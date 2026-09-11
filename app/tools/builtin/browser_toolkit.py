@@ -1,13 +1,14 @@
 """Browser tool implementations (PROJECT.md section 10, phase 3).
 
-Each of the 8 browser actions is a typed BaseTool[Input, Output] that:
+Each of the 13 browser actions is a typed BaseTool[Input, Output] that:
 - Accepts session_id in its input model
 - Resolves the BrowserSession from the injected BrowserSessionManager
 - Delegates to the corresponding BrowserSession method
 - Returns BrowserActionResult directly
 
-Risk levels: LOW for read-only (navigate, inspect, extract, screenshot);
-MEDIUM for interactive (click, type, scroll, wait).
+Risk levels: LOW for read-only (navigate, inspect, extract, screenshot,
+list_tabs); MEDIUM for interactive (click, type, scroll, wait, select,
+new_tab, switch_tab, download).
 """
 
 from __future__ import annotations
@@ -26,6 +27,9 @@ if TYPE_CHECKING:
     from app.browser.session import BrowserSessionManager
     from app.tools.executor import ExecutionContext, ToolExecutionEngine
 
+
+# All 13 tool classes + factory are defined below.
+# Shared imports for the browser tools:
 
 # ---------------------------------------------------------------------------
 # Navigate
@@ -62,7 +66,10 @@ class BrowserInspectInput(BaseModel):
 
 class BrowserInspectTool(BaseTool[BrowserInspectInput, BrowserActionResult]):
     name = "browser_inspect"
-    description = "Return the current page URL, title, and basic structure."
+    description = (
+        "Return structured page observation (title, headings, links, viewport) "
+        "without sending raw DOM to the model."
+    )
     permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
 
     def __init__(self, session_manager: BrowserSessionManager) -> None:
@@ -109,11 +116,12 @@ class BrowserTypeInput(BaseModel):
     value: str
     text: str
     role: str | None = None
+    clear: bool = True
 
 
 class BrowserTypeTool(BaseTool[BrowserTypeInput, BrowserActionResult]):
     name = "browser_type"
-    description = "Type text into an input element."
+    description = "Type or fill text into an input element."
     permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=False)
 
     def __init__(self, session_manager: BrowserSessionManager) -> None:
@@ -122,7 +130,36 @@ class BrowserTypeTool(BaseTool[BrowserTypeInput, BrowserActionResult]):
     async def execute(self, tool_input: BrowserTypeInput) -> BrowserActionResult:
         session = self._manager.get_session(tool_input.session_id)
         return await session.type_text(
-            tool_input.strategy, tool_input.value, tool_input.text, role=tool_input.role
+            tool_input.strategy, tool_input.value, tool_input.text,
+            role=tool_input.role, clear=tool_input.clear,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Select (dropdown)
+# ---------------------------------------------------------------------------
+
+
+class BrowserSelectInput(BaseModel):
+    session_id: str
+    strategy: SelectorStrategy
+    value: str
+    option: str
+    role: str | None = None
+
+
+class BrowserSelectTool(BaseTool[BrowserSelectInput, BrowserActionResult]):
+    name = "browser_select"
+    description = "Select an option from a dropdown (select) element."
+    permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=False)
+
+    def __init__(self, session_manager: BrowserSessionManager) -> None:
+        self._manager = session_manager
+
+    async def execute(self, tool_input: BrowserSelectInput) -> BrowserActionResult:
+        session = self._manager.get_session(tool_input.session_id)
+        return await session.select(
+            tool_input.strategy, tool_input.value, tool_input.option, role=tool_input.role
         )
 
 
@@ -133,11 +170,16 @@ class BrowserTypeTool(BaseTool[BrowserTypeInput, BrowserActionResult]):
 
 class BrowserExtractInput(BaseModel):
     session_id: str
+    selector: str | None = None
+    max_chars: int = 5_000
 
 
 class BrowserExtractTool(BaseTool[BrowserExtractInput, BrowserActionResult]):
     name = "browser_extract"
-    description = "Extract visible text content from the current page body (max 5,000 chars)."
+    description = (
+        "Extract visible text from the current page body, or from a specific "
+        "selector target if provided."
+    )
     permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
 
     def __init__(self, session_manager: BrowserSessionManager) -> None:
@@ -145,7 +187,9 @@ class BrowserExtractTool(BaseTool[BrowserExtractInput, BrowserActionResult]):
 
     async def execute(self, tool_input: BrowserExtractInput) -> BrowserActionResult:
         session = self._manager.get_session(tool_input.session_id)
-        return await session.extract_text()
+        return await session.extract_text(
+            selector=tool_input.selector, max_chars=tool_input.max_chars
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -218,11 +262,96 @@ class BrowserWaitTool(BaseTool[BrowserWaitInput, BrowserActionResult]):
     async def execute(self, tool_input: BrowserWaitInput) -> BrowserActionResult:
         session = self._manager.get_session(tool_input.session_id)
         return await session.wait_for_selector(
-            tool_input.strategy,
-            tool_input.value,
-            role=tool_input.role,
-            timeout_ms=tool_input.timeout_ms,
+            tool_input.strategy, tool_input.value,
+            role=tool_input.role, timeout_ms=tool_input.timeout_ms,
         )
+
+
+# ---------------------------------------------------------------------------
+# Download
+# ---------------------------------------------------------------------------
+
+
+class BrowserDownloadInput(BaseModel):
+    session_id: str
+    strategy: SelectorStrategy
+    value: str
+    role: str | None = None
+    timeout_ms: int = 30_000
+
+
+class BrowserDownloadTool(BaseTool[BrowserDownloadInput, BrowserActionResult]):
+    name = "browser_download"
+    description = "Trigger a download by clicking a link or button and capture the file."
+    permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=True)
+
+    def __init__(self, session_manager: BrowserSessionManager) -> None:
+        self._manager = session_manager
+
+    async def execute(self, tool_input: BrowserDownloadInput) -> BrowserActionResult:
+        session = self._manager.get_session(tool_input.session_id)
+        return await session.download(
+            tool_input.strategy, tool_input.value,
+            role=tool_input.role, timeout_ms=tool_input.timeout_ms,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tab management
+# ---------------------------------------------------------------------------
+
+
+class BrowserNewTabInput(BaseModel):
+    session_id: str
+    url: str | None = None
+
+
+class BrowserNewTabTool(BaseTool[BrowserNewTabInput, BrowserActionResult]):
+    name = "browser_new_tab"
+    description = "Open a new browser tab, optionally navigating to a URL."
+    permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=False)
+
+    def __init__(self, session_manager: BrowserSessionManager) -> None:
+        self._manager = session_manager
+
+    async def execute(self, tool_input: BrowserNewTabInput) -> BrowserActionResult:
+        session = self._manager.get_session(tool_input.session_id)
+        return await session.new_tab(url=tool_input.url)
+
+
+class BrowserSwitchTabInput(BaseModel):
+    session_id: str
+    index: int = 0
+
+
+class BrowserSwitchTabTool(BaseTool[BrowserSwitchTabInput, BrowserActionResult]):
+    name = "browser_switch_tab"
+    description = "Switch the active tab by index."
+    permissions = ToolPermissions(risk_level=RiskLevel.MEDIUM, requires_approval=False)
+
+    def __init__(self, session_manager: BrowserSessionManager) -> None:
+        self._manager = session_manager
+
+    async def execute(self, tool_input: BrowserSwitchTabInput) -> BrowserActionResult:
+        session = self._manager.get_session(tool_input.session_id)
+        return await session.switch_tab(index=tool_input.index)
+
+
+class BrowserListTabsInput(BaseModel):
+    session_id: str
+
+
+class BrowserListTabsTool(BaseTool[BrowserListTabsInput, BrowserActionResult]):
+    name = "browser_list_tabs"
+    description = "List all open tabs in the current browser session."
+    permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
+
+    def __init__(self, session_manager: BrowserSessionManager) -> None:
+        self._manager = session_manager
+
+    async def execute(self, tool_input: BrowserListTabsInput) -> BrowserActionResult:
+        session = self._manager.get_session(tool_input.session_id)
+        return await session.list_tabs()
 
 
 # ---------------------------------------------------------------------------
@@ -244,9 +373,14 @@ def build_browser_tools(
         BrowserInspectTool(session_manager),
         BrowserClickTool(session_manager),
         BrowserTypeTool(session_manager),
+        BrowserSelectTool(session_manager),
         BrowserExtractTool(session_manager),
         BrowserScrollTool(session_manager),
         BrowserScreenshotTool(session_manager),
         BrowserWaitTool(session_manager),
+        BrowserDownloadTool(session_manager),
+        BrowserNewTabTool(session_manager),
+        BrowserSwitchTabTool(session_manager),
+        BrowserListTabsTool(session_manager),
     ]
     return [to_langchain_tool(t, engine, context=context) for t in tools]
