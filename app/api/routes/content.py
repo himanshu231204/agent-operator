@@ -14,7 +14,7 @@ from app.api.deps import DbSessionDep
 from app.content.validators import validate_content
 from app.db.models.draft import Draft
 from app.errors import ValidationError
-from app.schemas.content import DraftCreateRequest, DraftRead
+from app.schemas.content import DraftCreateRequest, DraftRead, DraftUpdateRequest
 
 router = APIRouter(prefix="/content/drafts", tags=["content"])
 
@@ -40,4 +40,31 @@ async def get_draft(draft_id: uuid.UUID, session: DbSessionDep) -> DraftRead:
     draft = await session.get(Draft, draft_id)
     if draft is None:
         raise ValidationError(f"Draft {draft_id} not found", context={"draft_id": str(draft_id)})
+    return DraftRead.model_validate(draft)
+
+
+@router.patch("/{draft_id}", response_model=DraftRead)
+async def update_draft(
+    draft_id: uuid.UUID,
+    payload: DraftUpdateRequest,
+    session: DbSessionDep,
+) -> DraftRead:
+    draft = await session.get(Draft, draft_id)
+    if draft is None:
+        raise ValidationError(
+            f"Draft {draft_id} not found",
+            context={"draft_id": str(draft_id)},
+        )
+    if payload.content is not None:
+        validation = validate_content(draft.platform, payload.content)
+        if not validation.valid:
+            raise ValidationError(
+                "Updated content failed validation",
+                context={"issues": [i.model_dump() for i in validation.issues]},
+            )
+        draft.content = payload.content
+    if payload.status is not None:
+        draft.status = payload.status
+    await session.commit()
+    await session.refresh(draft)
     return DraftRead.model_validate(draft)
