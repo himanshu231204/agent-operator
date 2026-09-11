@@ -17,10 +17,11 @@ in `PROJECT.md` section 55, not just "the code runs once."
 
 - **Phase 1 — Foundation**: ✅ done (Python project, FastAPI, config, logging,
   PostgreSQL, Redis, migrations, Docker).
-- **Phase 2 — Agent Core**: 🚧 in progress. Model router now runs on
-  **LiteLLM** via `langchain-litellm` (`ChatLiteLLM`) — see "Decisions
-  already made" below. Orchestrator loop, persistence wiring, and tool
-  execution engine are still placeholders.
+- **Phase 2 — Agent Core**: ✅ done. Model router runs on **LiteLLM** via
+  `langchain-litellm` (`ChatLiteLLM`). Orchestrator loop, tool execution
+  engine (permission-checked, audited), planner with structured output,
+  agent wiring, HITL approvals, and cost/usage hooks are in place. See
+  "Decisions already made" below.
 - **Phases 3–8**: not started.
 
 ---
@@ -43,36 +44,38 @@ in `PROJECT.md` section 55, not just "the code runs once."
 
 ## Phase 2 — Agent Core
 
-- [ ] **Orchestrator execution loop** (`app/agents/orchestrator.py`):
-  implement the loop in PROJECT.md section 9 (observe → decide → approve-if-
-  needed → execute → update state → re-plan/verify), enforcing
-  `LimitSettings` (max iterations, tool calls, execution time, retries).
-- [ ] **Planner agent**: turn a validated task instruction into an ordered
-  step plan. *Open decision:* plain LLM-with-structured-output vs a graph
-  framework (e.g. LangGraph) for multi-step plans with branching/retries —
-  needs a call before this lands (see "Needs a decision" below).
-- [ ] Wire each placeholder agent (`research_agent.py`, `browser_agent.py`,
+- [x] **Orchestrator execution loop** (`app/agents/orchestrator.py`):
+  observe → plan → per-step decide → approve-if-needed → execute → update
+  state → recover, enforcing `LimitSettings` (max iterations, tool calls,
+  execution time, retries).
+- [x] **Planner agent**: LLM-with-structured-output (routed via
+  `ModelRouter`, falls back to a single-step plan when the underlying
+  provider does not support structured output — the `fake` provider used
+  in CI). LangGraph revisit deferred to Phase 8 once branching/retry
+  patterns emerge from real usage.
+- [x] Wire each placeholder agent (`research_agent.py`, `browser_agent.py`,
   `content_agent.py`, `fact_checker.py`, `social_agent.py`,
-  `verification_agent.py`, `recovery_agent.py`) to actually call the model
-  router + tool registry instead of raising `NotImplementedError`.
-- [ ] **Tool execution engine**: central dispatcher that pulls a tool from
-  `ToolRegistry`, checks `ToolPermissions` (risk level, approval,
-  authentication) *before* calling it, and persists a `ToolCall` row per
-  invocation (AGENTS.md rules 154–158).
-- [ ] Persist `AgentRun`/`ToolCall` rows from real agent execution (models
-  already exist in `app/db/models`; nothing writes to them yet outside
-  tests).
-- [ ] Concrete LangChain tool wrappers: adapt `BaseTool` subclasses to
-  `langchain_core.tools.BaseTool`/`StructuredTool` so they can be bound to
-  a `ChatLiteLLM` model's tool-calling interface.
-- [ ] Human-in-the-loop: wire `ApprovalService` into the orchestrator loop
-  as the actual pause/resume point (LangChain interrupt-style or a custom
-  `WAITING_FOR_APPROVAL` poll — see "Needs a decision").
-- [ ] Cost/usage tracking: LiteLLM returns token usage on every response —
-  capture it into `AgentRun`/`ToolCall` for the cost-control requirements in
-  PROJECT.md section 40.
-- [ ] Unit tests for the orchestrator loop: max-iteration cutoff, re-plan
-  triggers, approval pause/resume, recovery-agent handoff on failure.
+  `verification_agent.py`, `recovery_agent.py`) to run through the tool
+  execution engine + policy (recovery agent stays deterministic — no LLM
+  call).
+- [x] **Tool execution engine** (`app/tools/executor.py`): central
+  dispatcher checks `ToolPermissions` (risk level, approval,
+  authentication) *before* calling the tool, and persists a `ToolCall`
+  row per invocation (AGENTS.md rules 154–158).
+- [x] Persist `AgentRun`/`ToolCall` rows from real agent execution.
+- [x] Concrete LangChain tool wrappers (`app/tools/langchain_adapter.py`):
+  adapt `BaseTool` to `langchain_core.tools.StructuredTool` while routing
+  execution through the engine (never bypassing permission checks).
+- [x] Human-in-the-loop: orchestrator creates an `Approval` via
+  `ApprovalService`, transitions to `WAITING_FOR_APPROVAL`, and returns;
+  the next `run(task_id)` call resumes from the persisted plan with
+  approved actions in `ExecutionContext.approved_actions`.
+- [x] Cost/usage tracking: `app/llm/usage.py` normalizes LiteLLM /
+  LangChain token metadata into a persistable dict (wiring the numbers
+  onto `AgentRun.output` is a follow-up once real model calls are made).
+- [x] Unit + integration tests for the orchestrator loop: happy path,
+  approval pause, resume after approval, max-iteration cutoff, recovery
+  classification.
 
 ## Phase 3 — Browser
 

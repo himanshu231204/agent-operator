@@ -62,7 +62,10 @@ _HAPPY_PATH: dict[TaskState, frozenset[TaskState]] = {
         {TaskState.WAITING_FOR_APPROVAL, TaskState.EXECUTING, TaskState.DRAFTING}
     ),
     TaskState.WAITING_FOR_APPROVAL: frozenset({TaskState.EXECUTING, TaskState.CANCELLED}),
-    TaskState.EXECUTING: frozenset({TaskState.VERIFYING}),
+    # EXECUTING -> WAITING_FOR_APPROVAL covers the case where an
+    # orchestrator step mid-plan discovers it needs human approval before
+    # continuing (a HIGH-risk tool the planner did not upfront-flag).
+    TaskState.EXECUTING: frozenset({TaskState.VERIFYING, TaskState.WAITING_FOR_APPROVAL}),
     TaskState.VERIFYING: frozenset({TaskState.COMPLETED, TaskState.EXECUTING}),
     TaskState.COMPLETED: frozenset(),
     TaskState.FAILED: frozenset(),

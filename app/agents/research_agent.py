@@ -1,24 +1,17 @@
-"""Research agent placeholder (PROJECT.md section 14).
+"""Research agent (PROJECT.md section 14).
 
-The full multi-source research workflow (search -> collect -> extract ->
-cross-check -> synthesize -> cite) is implemented incrementally on top of
-``app.research`` -- this class only defines the agent-facing contract.
+Thin agent facade over the tool execution engine: picks a research tool
+from the registry and runs it. The full multi-source pipeline (search ->
+extract -> cross-check -> synthesize) is layered on top of these
+primitives in Phase 4 -- this agent only guarantees that every research
+call goes through the permission-checked, audited engine.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.base import Agent, AgentDecision, AgentObservation, AgentResult
+from app.agents.tool_agent import ToolBackedAgent
 
 
-class ResearchAgent(Agent):
+class ResearchAgent(ToolBackedAgent):
     name = "research"
-
-    async def decide(
-        self, observation: AgentObservation, *, context: dict[str, Any] | None = None
-    ) -> AgentDecision:
-        raise NotImplementedError("ResearchAgent is not yet implemented")
-
-    async def act(self, decision: AgentDecision) -> AgentResult:
-        raise NotImplementedError("ResearchAgent is not yet implemented")
+    default_tool = "web_search"

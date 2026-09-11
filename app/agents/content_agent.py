@@ -1,24 +1,16 @@
-"""Content agent placeholder (PROJECT.md section 16).
+"""Content agent (PROJECT.md section 16).
 
-Drafts content from validated research. Actual generation is delegated to
-``app.content.generator`` once implemented; publishing is always a
-separate, later step (PROJECT.md section 20).
+Delegates to a content-generation tool through the tool execution engine.
+Actual generation (platform-aware, cited-claim-driven) is layered in
+Phase 5 -- this agent only guarantees every content call goes through the
+permission-checked, audited engine.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.base import Agent, AgentDecision, AgentObservation, AgentResult
+from app.agents.tool_agent import ToolBackedAgent
 
 
-class ContentAgent(Agent):
+class ContentAgent(ToolBackedAgent):
     name = "content"
-
-    async def decide(
-        self, observation: AgentObservation, *, context: dict[str, Any] | None = None
-    ) -> AgentDecision:
-        raise NotImplementedError("ContentAgent drafting logic is not yet implemented")
-
-    async def act(self, decision: AgentDecision) -> AgentResult:
-        raise NotImplementedError("ContentAgent drafting logic is not yet implemented")
+    default_tool = "content_generate"
