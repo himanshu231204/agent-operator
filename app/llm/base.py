@@ -3,7 +3,10 @@
 The application depends on ``langchain_core`` interfaces (``BaseChatModel``,
 ``Runnable``) rather than any single vendor SDK, so a model provider can be
 swapped without touching agent/tool code (PROJECT.md section 6, AGENTS.md
-section 3).
+section 3). The default production provider (``app.llm.providers.litellm_provider``)
+routes through LiteLLM via ``langchain_litellm.ChatLiteLLM``, so swapping
+providers -- OpenAI, Anthropic, Gemini, OpenRouter, or a self-hosted LiteLLM
+proxy -- is a model-string/config change, not a code change.
 """
 
 from __future__ import annotations

@@ -11,8 +11,10 @@ from __future__ import annotations
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
+from app.config import get_settings
 from app.errors import ModelError
 from app.llm.base import LLMProviderFactory
+from app.llm.providers.litellm_provider import build_litellm_provider
 
 _REGISTRY: dict[str, LLMProviderFactory] = {}
 
@@ -49,3 +51,4 @@ def _fake_provider(model_name: str, **kwargs: object) -> BaseChatModel:
 
 
 register_provider("fake", _fake_provider)
+register_provider("litellm", build_litellm_provider(get_settings().llm))
