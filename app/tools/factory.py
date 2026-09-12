@@ -3,9 +3,9 @@
 Centralises tool instantiation and registration so every code path
 (FastAPI dependencies, tests, CLI) builds the registry the same way.
 """
-
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 
     from app.browser.session import BrowserSessionManager
 
+from app.config import ModelRoutingSettings
+from app.content.tone_safety import ToneSafetyChecker
+from app.llm.router import ModelRouter
 from app.tools.builtin.content import ContentDraftTool, ContentValidateTool
 from app.tools.builtin.fact_check import FactCheckTool
 from app.tools.builtin.fetch import WebFetchTool
@@ -32,6 +35,11 @@ from app.tools.executor import ToolExecutionEngine
 from app.tools.registry import ToolRegistry
 
 
+@lru_cache
+def _tone_safety_checker() -> ToneSafetyChecker:
+    return ToneSafetyChecker(ModelRouter(ModelRoutingSettings()))
+
+
 def build_registry(
     session_manager: BrowserSessionManager | None = None,
 ) -> ToolRegistry:
@@ -39,6 +47,7 @@ def build_registry(
 
     Pass *session_manager* to also register the 13 browser tools.
     """
+    checker = _tone_safety_checker()
     registry = ToolRegistry()
     for tool in [
         FileReadTool(),
@@ -52,8 +61,8 @@ def build_registry(
         WebSearchTool(),
         LangSearchTool(),
         WebFetchTool(),
-        ContentDraftTool(),
-        ContentValidateTool(),
+        ContentDraftTool(tone_checker=checker),
+        ContentValidateTool(tone_checker=checker),
         FactCheckTool(),
     ]:
         registry.register(tool)

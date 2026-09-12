@@ -200,18 +200,18 @@ See `docs/phase-4-plan.md` for the full plan. Summary of what was built:
 
 ## Phase 5 — Content
 
-- [ ] Implement `ContentGenerator` (`app/content/generator.py`) using the
+- [x] Implement `ContentGenerator` (`app/content/generator.py`) using the
   model router — draft from validated research claims, platform-aware
   (X vs LinkedIn tone/length), never inventing stats/quotes/sources
   (AGENTS.md rule 120).
-- [ ] Tone/safety checks: currently only length/links/duplicates are
-  deterministic (`app/content/validators.py`); tone and safety need an
-  LLM-backed check layered on top (AGENTS.md rule 272 — LLM only where
-  deterministic validation isn't sufficient).
-- [ ] Thread support for X (multi-post drafts with ordering).
-- [ ] Draft editing endpoint/flow (PROJECT.md rule 122: drafts must be
-  editable before approval) — currently create/read only.
-- [ ] Content generation tests using the `fake` LiteLLM provider (no live
+- [x] Tone/safety checks: `ToneSafetyChecker`
+  (`app/content/tone_safety.py`) provides the LLM-backed check layered
+  on top of the deterministic validators (`app/content/validators.py`).
+- [x] Thread support for X (multi-post drafts with ordering).
+- [x] Draft editing endpoint/flow (PROJECT.md rule 122: drafts must be
+  editable before approval) — PATCH endpoint already existed; research-aware
+  creation now supported.
+- [x] Content generation tests using the `fake` LiteLLM provider (no live
   API calls in CI).
 
 ## Phase 6 — Social

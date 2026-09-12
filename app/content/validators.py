@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from typing import TYPE_CHECKING
 
-from app.schemas.content import ContentValidationIssue, ContentValidationResult, Platform
+from app.schemas.content import ContentValidationIssue, ContentValidationResult, Platform, TonePreference
+
+if TYPE_CHECKING:
+    from app.content.tone_safety import ToneSafetyChecker
 
 #: Character limits per platform. X premium extended limits are out of
 #: scope for this foundation; the conservative free-tier limit is used.
@@ -21,7 +25,7 @@ PLATFORM_CHARACTER_LIMITS: dict[Platform, int] = {
     "linkedin": 3000,
 }
 
-_URL_PATTERN = re.compile(r"https?://[^\s]+")
+_URL_PATTERN = re.compile(r"https?://[^\\s]+")
 
 
 def content_hash(content: str) -> str:
@@ -53,6 +57,36 @@ def validate_duplicate(
             check="duplicates", message="Identical content was already drafted/published"
         )
     return None
+
+
+async def validate_content_async(
+    platform: Platform,
+    content: str,
+    *,
+    existing_hashes: set[str] | None = None,
+    tone: TonePreference | None = None,
+    tone_checker: "ToneSafetyChecker | None" = None,
+) -> ContentValidationResult:
+    """Run deterministic checks plus optional LLM-backed tone/safety check."""
+    issues: list[ContentValidationIssue] = []
+
+    if not content.strip():
+        issues.append(ContentValidationIssue(check="formatting", message="Content is empty"))
+        return ContentValidationResult(valid=False, issues=issues)
+
+    for check in (
+        validate_length(platform, content),
+        validate_links(content),
+        validate_duplicate(content, existing_hashes or set()),
+    ):
+        if check is not None:
+            issues.append(check)
+
+    if tone_checker is not None and tone is not None:
+        tone_issues = await tone_checker.check(content, tone)
+        issues.extend(tone_issues)
+
+    return ContentValidationResult(valid=not issues, issues=issues)
 
 
 def validate_content(

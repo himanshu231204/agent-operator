@@ -6,7 +6,7 @@ The ReAct LLM generates text; these tools format, split, and validate it.
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from app.content.validators import validate_content
 from app.policies.risk import RiskLevel
@@ -18,6 +18,9 @@ from app.schemas.content import (
     ThreadPost,
 )
 from app.tools.base import BaseTool, ToolPermissions
+
+if TYPE_CHECKING:
+    from app.content.tone_safety import ToneSafetyChecker
 
 # Reserve 5 chars for " i/N" numbering suffix (handles up to 9 posts;
 # 2-digit totals need 6 — edge case accepted for simplicity).
@@ -72,6 +75,10 @@ class ContentDraftTool(BaseTool[ContentDraftToolInput, ContentDraftToolOutput]):
         requires_approval=False,
     )
 
+    def __init__(self, *, tone_checker: "ToneSafetyChecker | None" = None) -> None:
+        super().__init__()
+        self._tone_checker = tone_checker
+
     async def execute(self, tool_input: ContentDraftToolInput) -> ContentDraftToolOutput:
         if tool_input.platform == "x" and len(tool_input.content) > 280:
             # Split first, then validate each individual post.
@@ -123,6 +130,15 @@ class ContentValidateTool(BaseTool[ContentValidateToolInput, ContentValidateTool
     )
     timeout_seconds: ClassVar[float] = 5.0
 
+    def __init__(self, *, tone_checker: "ToneSafetyChecker | None" = None) -> None:
+        super().__init__()
+        self._tone_checker = tone_checker
+
     async def execute(self, tool_input: ContentValidateToolInput) -> ContentValidateToolOutput:
         result = validate_content(tool_input.platform, tool_input.content)
-        return ContentValidateToolOutput(valid=result.valid, issues=result.issues)
+        if not result.valid:
+            return ContentValidateToolOutput(valid=False, issues=result.issues)
+        tone_issues: list[ContentValidationIssue] = []
+        if tool_input.tone is not None and self._tone_checker is not None:
+            tone_issues = await self._tone_checker.check(tool_input.content, tool_input.tone)
+        return ContentValidateToolOutput(valid=not tone_issues, issues=tone_issues)
