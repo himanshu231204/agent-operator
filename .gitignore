@@ -221,3 +221,4 @@ __marimo__/
 .claude/
 .codex/
 .opencode/
+.venv-stale
