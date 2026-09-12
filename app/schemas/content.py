@@ -14,6 +14,13 @@ class DraftCreateRequest(BaseModel):
     platform: Platform
     content: str = Field(min_length=1)
     task_id: uuid.UUID | None = None
+    tone: TonePreference | None = None
+    research: list["ClaimInput"] | None = None
+
+
+class ClaimInput(BaseModel):
+    claim: str = Field(min_length=1, max_length=2000)
+    confidence: float = Field(ge=0.0, le=1.0, default=0.5)
 
 
 class DraftRead(BaseModel):
@@ -64,6 +71,7 @@ class ContentDraftToolOutput(BaseModel):
 class ContentValidateToolInput(BaseModel):
     platform: Platform
     content: str = Field(min_length=1)
+    tone: TonePreference | None = None
 
 
 class ContentValidateToolOutput(BaseModel):
