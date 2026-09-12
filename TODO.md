@@ -134,27 +134,69 @@ in `PROJECT.md` section 55, not just "the code runs once."
 
 ## Phase 4 — Research
 
-- [ ] **Search integration** — *Needs a decision*: which search API
-  (Tavily, Serper/SerpAPI, Bing Search, Exa, ...)? Affects `WebSearchTool`
-  and `.env.example`.
-- [ ] `WebSearchTool` / `WebFetchTool` with SSRF protections (AGENTS.md
-  rule 168–169: validate/restrict fetch targets).
-- [ ] Document loaders + text splitters (`langchain-text-splitters`,
+- [x] **Search integration** — *resolved*: **Tavily** is the primary search
+  API (`WebSearchTool` → `web_search`, already registered) with **LangSearch**
+  as a secondary fall-back (`lang_search`) when Tavily returns empty. Both are
+  configured via `TAVILY_API_KEY` / `LANGSEARCH_API_KEY` in `.env.example`.
+  Detailed decision record in `docs/phase-4-plan.md`.
+- [x] `WebSearchTool` / `WebFetchTool` with SSRF protections (AGENTS.md
+  rule 168–169: validate/restrict fetch targets) — `WebFetchTool` already has
+  `_guard_url` SSRF protection (scheme allow-list, no private/loopback hosts);
+  tests pass.
+- [x] Document loaders + text splitters (`langchain-text-splitters`,
   already pulled in transitively) for extracting evidence from fetched
-  pages — only where it improves retrieval quality (AGENTS.md rule 101).
-- [ ] Implement `ResearchPipeline` (`app/research/pipeline.py`): search →
+  pages — only where it improves retrieval quality (AGENTS.md rule 101):
+  `RecursiveCharacterTextSplitter` in `DefaultResearchPipeline._chunk_text`,
+  applied only when page length > 4000 chars (single chunk for short pages).
+- [x] Implement `ResearchPipeline` (`app/research/pipeline.py`): search →
   extract → cross-check → synthesize, backed by real tools and the
-  `REASONING` model class.
-- [ ] Source classification (primary/official/secondary/community/
-  unverified) and freshness weighting.
-- [ ] Fact-checking agent: verify claims against sources before they reach
-  content generation; never let a claim through without recorded evidence
-  (AGENTS.md rules 98–99, 115).
-- [ ] Prompt-injection tests: fetched content containing "ignore previous
-  instructions" style payloads must never change agent behavior (AGENTS.md
-  rule 203) — add adversarial fixtures.
-- [ ] Research tests: source ranking, conflict surfacing, citation
-  correctness.
+  `REASONING` model class — concrete `DefaultResearchPipeline` drives
+  `web_search`/`web_fetch`/`lang_search` through the `ToolExecutionEngine`;
+  synthesis routes via `ModelRouter` with `RoutingCriteria(requires_reasoning=True,
+  conflicting_evidence=True)`.
+- [x] Source classification (primary/official/secondary/community/
+  unverified) and freshness weighting — `app/research/classification.py`.
+- [x] Fact-checking agent: `FactCheckTool` (`app/tools/builtin/fact_check.py`)
+  verifies claims against sources via web search + fetch, routed through the
+  engine; deterministic signal logic (no LLM verdict). Registered as
+  `fact_check` in the tool factory.
+- [x] Prompt-injection tests: fetched content containing "ignore previous
+  instructions" style payloads must never change agent behavior (AGANS.md
+  rule 203) — adversarial fixtures in `tests/fixtures/adversarial_web_content.py`
+  (6 payloads) + `tests/unit/test_research_prompt_injection.py`; deterministic
+  sentence sanitizer in `_extract_claims_from_text` strips injected directives.
+- [x] Research tests: source ranking, conflict surfacing, citation
+  correctness — `tests/unit/test_research_pipeline.py` (13 tests),
+  `tests/unit/test_research_classification.py` (34 tests),
+  `tests/unit/test_fact_check_tool.py` (18 tests).
+
+### Phase 4 detailed implementation plan (checklist)
+
+See `docs/phase-4-plan.md` for the full plan. Summary of what was built:
+
+- [x] Resolve search provider decision (Tavily primary, LangSearch fallback).
+- [x] `app/research/classification.py`: `classify_source`, `classify_source_obj`,
+      `freshness_score`, `sort_by_confidence_and_freshness`; tests.
+- [x] `app/tools/builtin/fact_check.py`: `FactCheckTool` (LOW risk, read-only,
+      dispatches sub-tools via engine); `FactCheckToolInput`/`FactCheckToolOutput`
+      with typed verdict constants; tests.
+- [x] Register `fact_check` in `app/tools/factory.py` + wire engine in
+      `build_tool_engine`; update registry test.
+- [x] `app/schemas/research.py`: add `ResearchResult` schema.
+- [x] `app/research/pipeline.py`: concrete `DefaultResearchPipeline`
+      (search → extract → cross-check → synthesize → run) using REASONING
+      model + text splitters; prompt-injection sanitizer.
+- [x] `tests/fixtures/adversarial_web_content.py`: 6 injection payloads.
+- [x] `tests/unit/test_research_prompt_injection.py`: fetch preserves content,
+      pipeline doesn't echo instructions as facts, SSRF guards file:// URLs.
+- [x] `tests/unit/test_research_pipeline.py`: source ranking, classification,
+      max_sources, fallback, extract, cross-check, synthesize routing,
+      conflict surfacing, citation correctness.
+- [x] `tests/unit/test_research_classification.py`: all source types, freshness
+      decay, ranking, edge cases.
+- [x] `tests/unit/test_fact_check_tool.py`: verdict logic, evidence aggregation,
+      conflicting evidence, empty results, unsupported claims, sub-tool routing.
+- [x] `docs/phase-4-plan.md`: full plan + decision record.
 
 ## Phase 5 — Content
 
@@ -253,7 +295,8 @@ silently decided:
    for all specialized agents. The outer orchestrator and task state machine
    stay; individual agent `decide`/`act` stubs are replaced by compiled
    LangGraph ReAct graphs.
-2. **Search provider** for Phase 4 (Tavily / Serper / Bing / Exa / other).
+2. ~~**Search provider** for Phase 4~~ — **resolved**: Tavily primary
+   (`web_search`) + LangSearch fallback (`lang_search`); see `docs/phase-4-plan.md`.
 3. **Credential storage** for OAuth tokens (X/LinkedIn) once real auth
    lands — encrypted DB column vs a secret manager (AWS Secrets Manager,
    Vault, etc.).

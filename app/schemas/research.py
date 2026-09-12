@@ -31,3 +31,13 @@ class Claim(BaseModel):
     evidence: str
     confidence: float = Field(ge=0.0, le=1.0)
     contradicting_evidence: str | None = None
+
+
+class ResearchResult(BaseModel):
+    """Structured output of a completed research pipeline (PROJECT.md §11)."""
+
+    question: str
+    summary: str
+    claims: list[Claim] = Field(default_factory=list)
+    sources_consulted: list[str] = Field(default_factory=list)
+    conflicts: list[str] = Field(default_factory=list)

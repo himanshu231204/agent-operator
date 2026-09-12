@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.browser.session import BrowserSessionManager
 
 from app.tools.builtin.content import ContentDraftTool, ContentValidateTool
+from app.tools.builtin.fact_check import FactCheckTool
 from app.tools.builtin.fetch import WebFetchTool
 from app.tools.builtin.filesystem import (
     FileDeleteTool,
@@ -53,6 +54,7 @@ def build_registry(
         WebFetchTool(),
         ContentDraftTool(),
         ContentValidateTool(),
+        FactCheckTool(),
     ]:
         registry.register(tool)
 
@@ -65,9 +67,9 @@ def build_registry(
             BrowserListTabsTool,
             BrowserNavigateTool,
             BrowserNewTabTool,
-            BrowserSelectTool,
             BrowserScreenshotTool,
             BrowserScrollTool,
+            BrowserSelectTool,
             BrowserSwitchTabTool,
             BrowserTypeTool,
             BrowserWaitTool,
@@ -94,5 +96,16 @@ def build_registry(
 
 
 def build_tool_engine(registry: ToolRegistry, session: AsyncSession) -> ToolExecutionEngine:
-    """Wire a registry and DB session into a ToolExecutionEngine."""
-    return ToolExecutionEngine(registry=registry, session=session)
+    """Wire a registry and DB session into a ToolExecutionEngine.
+
+    Also injects the engine + registry back into any ``FactCheckTool`` so it
+    can dispatch sub-tool calls (web_search / web_fetch) through the same
+    permission gate — without this late binding the tool can't be registered
+    before the engine exists.
+    """
+    engine = ToolExecutionEngine(registry=registry, session=session)
+    for tool in registry.list_tools():
+        dep = registry.get(tool)
+        if isinstance(dep, FactCheckTool):
+            dep.wire_engine(engine, registry)
+    return engine
