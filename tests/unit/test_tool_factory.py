@@ -22,6 +22,9 @@ def test_build_registry_registers_all_tools() -> None:
         "content_draft",    # Phase 5
         "content_validate", # Phase 5
         "fact_check",       # Phase 4
+        "social_publish_x",     # Phase 6
+        "social_publish_linkedin",  # Phase 6
+        "social_verify",        # Phase 6
     }
     registered = set(registry.list_tools())
     assert expected == registered

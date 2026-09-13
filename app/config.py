@@ -8,8 +8,8 @@ variables / a local .env file and never hard-coded.
 
 from __future__ import annotations
 
-from functools import lru_cache
 from enum import StrEnum
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -131,8 +131,12 @@ class SocialSettings(BaseSettings):
 
     x_client_id: str | None = None
     x_client_secret: str | None = None
+    x_access_token: str | None = None
+    x_bearer_token: str | None = None
     linkedin_client_id: str | None = None
     linkedin_client_secret: str | None = None
+    linkedin_access_token: str | None = None
+    linkedin_author_urn: str | None = None
 
 
 class SecuritySettings(BaseSettings):

@@ -1,21 +1,24 @@
 """Social publishing routes (PROJECT.md sections 18-20, 36).
 
-Real publishing is not implemented in this foundation -- adapters raise
-``NotImplementedError`` until a platform integration is built. Publishing
-always requires an already-approved ``approval_id`` (PROJECT.md section 20:
-"draft" must never be interpreted as "publish").
+Publishing requires an already-approved ``approval_id`` (PROJECT.md section 20:
+"draft" must never be interpreted as "publish"). The publish tools enforce
+HIGH-risk approval through the ToolExecutionEngine.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.deps import ApprovalServiceDep, DbSessionDep, SettingsDep
+from app.api.deps import ApprovalServiceDep, DbSessionDep, SettingsDep, ToolEngineDep
 from app.db.models.draft import Draft
 from app.errors import ApprovalRequiredError, ValidationError
-from app.schemas.social import PublishRequest, PublishResult
-from app.social.linkedin_adapter import LinkedInAdapter
-from app.social.x_adapter import XAdapter
+from app.schemas.social import (
+    LinkedInPublishToolInput,
+    PublishRequest,
+    PublishResult,
+    XPublishToolInput,
+)
+from app.tools.executor import ExecutionContext
 
 router = APIRouter(prefix="/social", tags=["social"])
 
@@ -44,12 +47,24 @@ async def publish_x(
     session: DbSessionDep,
     approvals: ApprovalServiceDep,
     settings: SettingsDep,
+    engine: ToolEngineDep,
 ) -> PublishResult:
-    draft = await _load_approved_draft(payload, session, approvals)
-    adapter = XAdapter(
-        client_id=settings.social.x_client_id, client_secret=settings.social.x_client_secret
+    await _load_approved_draft(payload, session, approvals)
+    result = await engine.execute(
+        "social_publish_x",
+        XPublishToolInput(
+            draft_id=payload.draft_id,
+            idempotency_key=payload.idempotency_key,
+        ),
+        context=ExecutionContext(approved_actions=frozenset(["social_publish_x"])),
     )
-    return await adapter.publish(draft)  # type: ignore[arg-type]
+    return PublishResult(
+        platform="x",
+        external_id=result.output.post_id,
+        idempotency_key=payload.idempotency_key,
+        content_hash="",
+        execution_status="succeeded",
+    )
 
 
 @router.post("/linkedin/publish", response_model=PublishResult)
@@ -58,10 +73,21 @@ async def publish_linkedin(
     session: DbSessionDep,
     approvals: ApprovalServiceDep,
     settings: SettingsDep,
+    engine: ToolEngineDep,
 ) -> PublishResult:
-    draft = await _load_approved_draft(payload, session, approvals)
-    adapter = LinkedInAdapter(
-        client_id=settings.social.linkedin_client_id,
-        client_secret=settings.social.linkedin_client_secret,
+    await _load_approved_draft(payload, session, approvals)
+    result = await engine.execute(
+        "social_publish_linkedin",
+        LinkedInPublishToolInput(
+            draft_id=payload.draft_id,
+            idempotency_key=payload.idempotency_key,
+        ),
+        context=ExecutionContext(approved_actions=frozenset(["social_publish_linkedin"])),
     )
-    return await adapter.publish(draft)  # type: ignore[arg-type]
+    return PublishResult(
+        platform="linkedin",
+        external_id=result.output.post_id,
+        idempotency_key=payload.idempotency_key,
+        content_hash="",
+        execution_status="succeeded",
+    )
