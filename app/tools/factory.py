@@ -3,6 +3,7 @@
 Centralises tool instantiation and registration so every code path
 (FastAPI dependencies, tests, CLI) builds the registry the same way.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
     from app.browser.session import BrowserSessionManager
 
-from app.config import ModelRoutingSettings
+from app.config import ModelRoutingSettings, SocialSettings
 from app.content.tone_safety import ToneSafetyChecker
 from app.llm.router import ModelRouter
 from app.tools.builtin.content import ContentDraftTool, ContentValidateTool
@@ -31,6 +32,8 @@ from app.tools.builtin.filesystem import (
 from app.tools.builtin.langsearch import LangSearchTool
 from app.tools.builtin.search import WebSearchTool
 from app.tools.builtin.shell import ShellRunTool
+from app.tools.builtin.social_publish import LinkedInPublishTool, XPublishTool
+from app.tools.builtin.social_verify import SocialVerifyTool
 from app.tools.executor import ToolExecutionEngine
 from app.tools.registry import ToolRegistry
 
@@ -38,6 +41,10 @@ from app.tools.registry import ToolRegistry
 @lru_cache
 def _tone_safety_checker() -> ToneSafetyChecker:
     return ToneSafetyChecker(ModelRouter(ModelRoutingSettings()))
+
+
+def _social_settings() -> SocialSettings:
+    return SocialSettings()
 
 
 def build_registry(
@@ -48,6 +55,7 @@ def build_registry(
     Pass *session_manager* to also register the 13 browser tools.
     """
     checker = _tone_safety_checker()
+    social = _social_settings()
     registry = ToolRegistry()
     for tool in [
         FileReadTool(),
@@ -64,6 +72,20 @@ def build_registry(
         ContentDraftTool(tone_checker=checker),
         ContentValidateTool(tone_checker=checker),
         FactCheckTool(),
+        XPublishTool(
+            access_token=social.x_access_token,
+            bearer_token=social.x_bearer_token,
+        ),
+        LinkedInPublishTool(
+            access_token=social.linkedin_access_token,
+            author_urn=social.linkedin_author_urn,
+        ),
+        SocialVerifyTool(
+            x_access_token=social.x_access_token,
+            x_bearer_token=social.x_bearer_token,
+            linkedin_access_token=social.linkedin_access_token,
+            linkedin_author_urn=social.linkedin_author_urn,
+        ),
     ]:
         registry.register(tool)
 
@@ -113,8 +135,34 @@ def build_tool_engine(registry: ToolRegistry, session: AsyncSession) -> ToolExec
     before the engine exists.
     """
     engine = ToolExecutionEngine(registry=registry, session=session)
+    social = _social_settings()
     for tool in registry.list_tools():
         dep = registry.get(tool)
         if isinstance(dep, FactCheckTool):
             dep.wire_engine(engine, registry)
+        if isinstance(dep, XPublishTool):
+            dep._session = session
+            dep._access_token = social.x_access_token
+            dep._bearer_token = social.x_bearer_token
+        if isinstance(dep, LinkedInPublishTool):
+            dep._session = session
+            dep._access_token = social.linkedin_access_token
+            dep._author_urn = social.linkedin_author_urn
+        if isinstance(dep, SocialVerifyTool):
+            dep._session = session
+            dep._x_access_token = social.x_access_token
+            dep._x_bearer_token = social.x_bearer_token
+            dep._linkedin_access_token = social.linkedin_access_token
+            dep._linkedin_author_urn = social.linkedin_author_urn
     return engine
+
+
+def _resolve_social_tokens() -> dict[str, str | None]:
+    """Resolve social tokens from settings at call time (not cached)."""
+    settings = SocialSettings()
+    return {
+        "x_access_token": settings.x_access_token,
+        "x_bearer_token": settings.x_bearer_token,
+        "linkedin_access_token": settings.linkedin_access_token,
+        "linkedin_author_urn": settings.linkedin_author_urn,
+    }

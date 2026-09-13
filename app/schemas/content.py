@@ -15,7 +15,7 @@ class DraftCreateRequest(BaseModel):
     content: str = Field(min_length=1)
     task_id: uuid.UUID | None = None
     tone: TonePreference | None = None
-    research: list["ClaimInput"] | None = None
+    research: list[ClaimInput] | None = None
 
 
 class ClaimInput(BaseModel):

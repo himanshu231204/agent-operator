@@ -6,6 +6,7 @@ pipeline never depends on platform-specific logic (AGENTS.md rule 141).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from app.schemas.social import PublishResult, VerificationResultSchema
@@ -15,6 +16,15 @@ class Draft(Protocol):
     id: str
     platform: str
     content: str
+
+
+@dataclass
+class AdapterPublishResult:
+    """Return type for adapter publish calls."""
+
+    external_id: str
+    url: str
+    published_at: str  # ISO 8601
 
 
 class SocialPlatform(Protocol):

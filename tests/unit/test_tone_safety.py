@@ -7,7 +7,6 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from app.content.tone_safety import ToneSafetyChecker
-from app.schemas.content import TonePreference
 
 
 @pytest.fixture

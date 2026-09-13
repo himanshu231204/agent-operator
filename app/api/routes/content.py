@@ -11,12 +11,10 @@ from fastapi import APIRouter
 
 from app.api.deps import DbSessionDep
 from app.content.generator import LLMContentGenerator
-from app.content.tone_safety import ToneSafetyChecker
 from app.content.validators import validate_content
 from app.db.models.draft import Draft
 from app.errors import ValidationError
 from app.schemas.content import (
-    ClaimInput,
     DraftCreateRequest,
     DraftRead,
     DraftUpdateRequest,

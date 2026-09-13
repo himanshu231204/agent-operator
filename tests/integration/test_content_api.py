@@ -8,8 +8,6 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.db.models.draft import Draft
-
 
 @pytest.fixture()
 async def session():
@@ -35,7 +33,6 @@ async def test_create_draft_with_research_generates_via_llm(session):
 
     mock_generator = MagicMock()
     mock_generator.generate_draft = AsyncMock(return_value="Generated draft content.")
-    mock_checker = MagicMock()
 
     with patch("app.api.routes.content.LLMContentGenerator", return_value=mock_generator):
         result = await create_draft(
