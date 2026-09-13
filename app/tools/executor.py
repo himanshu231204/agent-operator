@@ -22,15 +22,43 @@ from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.db.models.agent_run import ToolCall
-from app.errors import ApprovalRequiredError, AuthenticationError, RateLimitError, ToolError
+from app.errors import (
+    ApprovalRequiredError,
+    AuthenticationError,
+    ModelError,
+    RateLimitError,
+    ToolError,
+)
 from app.logging import get_logger
 from app.policies.approval import requires_approval
 from app.policies.rate_limit import RateLimiter
 from app.policies.risk import RiskLevel
 from app.tools.base import BaseTool
 from app.tools.registry import ToolRegistry
+
+_RETRYABLE_ERRORS = (RateLimitError, ModelError, ToolError)
+
+
+def _make_tool_retry():
+    """Create a tenacity retry decorator for tool calls."""
+    return retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRYABLE_ERRORS),
+        before_sleep=lambda retry_state: logger.warning(
+            "tool.retry",
+            attempt=retry_state.attempt_number,
+            exception=str(retry_state.outcome.exception()) if retry_state.outcome else None,
+        ),
+    )
 
 logger = get_logger(__name__)
 
@@ -91,7 +119,7 @@ class ToolExecutionEngine:
         tool_call = await self._start_tool_call(tool, ctx, tool_input)
         started = time.monotonic()
         try:
-            output = await tool(tool_input)
+            output = await self._execute_with_retry(tool, tool_input)
         except Exception as exc:
             duration = time.monotonic() - started
             await self._finish_tool_call(
@@ -119,6 +147,17 @@ class ToolExecutionEngine:
             output=output,
             duration_seconds=duration,
         )
+
+    @_make_tool_retry()
+    async def _execute_with_retry(self, tool: BaseTool, tool_input: BaseModel) -> BaseModel:
+        """Execute a tool call with retry logic for transient failures.
+
+        Calls ``tool.execute()`` directly (not ``tool()``) so that retry
+        decisions happen BEFORE ``BaseTool.__call__`` wraps non-tool
+        exceptions in ``ToolError``. This prevents ``AuthenticationError``
+        (non-retryable) from being retried.
+        """
+        return await tool.execute(tool_input)
 
     def _enforce_permissions(self, tool: BaseTool, ctx: ExecutionContext) -> None:
         perms = tool.permissions

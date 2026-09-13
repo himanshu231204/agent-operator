@@ -1,14 +1,17 @@
-"""CLI for approval workflows (Phase 7 — Safety).
+"""CLI for agent operator (Phase 7 + 8).
 
-Provides command-line interface for approving/rejecting tasks,
-cancelling tasks, and running secrets audit.
+Provides command-line interface for:
+- Approving/rejecting tasks (Phase 7)
+- Cancelling tasks (Phase 7)
+- Running secrets audit (Phase 7)
+- Creating and tracking tasks (Phase 8)
+- Viewing task logs (Phase 8)
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import sys
 import uuid
 
@@ -16,7 +19,7 @@ import httpx
 
 
 class ApprovalCLI:
-    """CLI client for the Agent Operator approval API."""
+    """CLI client for the Agent Operator API."""
 
     def __init__(self, api_base: str) -> None:
         self._api_base = api_base.rstrip("/")
@@ -24,7 +27,6 @@ class ApprovalCLI:
     async def poll_and_prompt(self, task_id: uuid.UUID) -> None:
         """Poll for pending approval and prompt user to decide."""
         async with httpx.AsyncClient() as client:
-            # Get pending approval
             response = await client.get(
                 f"{self._api_base}/api/v1/tasks/{task_id}/approval"
             )
@@ -45,7 +47,6 @@ class ApprovalCLI:
             decision = input("Approve? [y/n]: ").strip().lower()
             approved = decision == "y"
 
-            # Submit decision
             response = await client.post(
                 f"{self._api_base}/api/v1/tasks/{task_id}/approval",
                 json={"approved": approved, "decided_by": "cli-user"},
@@ -82,6 +83,81 @@ class ApprovalCLI:
 
             print(f"\n{'=' * 50}")
 
+    async def run_task(self, instruction: str, timeout: int | None = None) -> None:
+        """Create a task and monitor its progress."""
+        async with httpx.AsyncClient() as client:
+            # Create task
+            payload = {"instruction": instruction}
+            if timeout:
+                payload["timeout_seconds"] = timeout
+
+            response = await client.post(
+                f"{self._api_base}/api/v1/tasks",
+                json=payload,
+            )
+            task = response.json()
+            task_id = task["id"]
+            print(f"Task created: {task_id}")
+            print(f"Initial state: {task['state']}")
+
+            # Poll until terminal state
+            while True:
+                await asyncio.sleep(2)
+                response = await client.get(
+                    f"{self._api_base}/api/v1/tasks/{task_id}"
+                )
+                task = response.json()
+                state = task["state"]
+                print(f"  State: {state}")
+
+                if state in ("completed", "failed", "cancelled", "timed_out"):
+                    break
+
+            print(f"\nFinal state: {state}")
+            if task.get("result"):
+                print(f"Result: {task['result']}")
+
+    async def get_status(self, task_id: uuid.UUID) -> None:
+        """Show current task state and result."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self._api_base}/api/v1/tasks/{task_id}"
+            )
+            task = response.json()
+            print(f"\nTask Status")
+            print(f"{'=' * 50}")
+            print(f"ID: {task['id']}")
+            print(f"Instruction: {task['instruction']}")
+            print(f"State: {task['state']}")
+            print(f"Created: {task['created_at']}")
+            print(f"Updated: {task['updated_at']}")
+            if task.get("result"):
+                print(f"Result: {task['result']}")
+            if task.get("error"):
+                print(f"Error: {task['error']}")
+
+    async def get_logs(self, task_id: uuid.UUID, limit: int = 20) -> None:
+        """Show recent agent runs for a task."""
+        async with httpx.AsyncClient() as client:
+            # Get agent runs
+            response = await client.get(
+                f"{self._api_base}/api/v1/tasks/{task_id}/runs"
+            )
+            if response.status_code != 200:
+                print(f"Error: {response.status_code}")
+                return
+
+            runs = response.json()
+            print(f"\nTask Logs (last {limit})")
+            print(f"{'=' * 50}")
+
+            for run in runs[:limit]:
+                print(f"\n  Agent: {run['agent_name']}")
+                print(f"  Status: {run['status']}")
+                print(f"  Duration: {run.get('duration_seconds', 'N/A')}s")
+                if run.get("output"):
+                    print(f"  Output: {run['output']}")
+
 
 def main() -> None:
     """Main entry point for the CLI."""
@@ -98,6 +174,20 @@ def main() -> None:
 
     # Audit command
     subparsers.add_parser("audit", help="Run secrets audit")
+
+    # Run command
+    run_parser = subparsers.add_parser("run", help="Create and monitor a task")
+    run_parser.add_argument("instruction", help="Task instruction")
+    run_parser.add_argument("--timeout", type=int, help="Timeout in seconds")
+
+    # Status command
+    status_parser = subparsers.add_parser("status", help="Show task status")
+    status_parser.add_argument("--task-id", required=True, help="Task ID")
+
+    # Logs command
+    logs_parser = subparsers.add_parser("logs", help="Show task logs")
+    logs_parser.add_argument("--task-id", required=True, help="Task ID")
+    logs_parser.add_argument("--limit", type=int, default=20, help="Max log entries")
 
     # Common arguments
     parser.add_argument(
@@ -119,6 +209,12 @@ def main() -> None:
         asyncio.run(cli.cancel_task(uuid.UUID(args.task_id)))
     elif args.command == "audit":
         asyncio.run(cli.audit_secrets())
+    elif args.command == "run":
+        asyncio.run(cli.run_task(args.instruction, args.timeout))
+    elif args.command == "status":
+        asyncio.run(cli.get_status(uuid.UUID(args.task_id)))
+    elif args.command == "logs":
+        asyncio.run(cli.get_logs(uuid.UUID(args.task_id), args.limit))
 
 
 if __name__ == "__main__":

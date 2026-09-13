@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from app.errors import ApprovalRequiredError, AuthenticationError, ToolError
+from app.errors import ApprovalRequiredError, AuthenticationError, RateLimitError, ToolError
 from app.policies.risk import RiskLevel
 from app.tools.base import BaseTool, ToolPermissions
 from app.tools.executor import ExecutionContext, ToolExecutionEngine
@@ -98,3 +98,64 @@ async def test_authenticated_tool_requires_authentication(engine):
 async def test_tool_error_translates_and_propagates(engine):
     with pytest.raises(ToolError):
         await engine.execute("boom", _In(text="x"))
+
+
+class _Flaky(BaseTool[_In, _Out]):
+    """Tool that fails twice then succeeds."""
+    name = "flaky"
+    description = "fails transiently"
+    permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._calls = 0
+
+    async def execute(self, tool_input: _In) -> _Out:
+        self._calls += 1
+        if self._calls < 3:
+            raise RateLimitError("rate limited")
+        return _Out(text=f"success:{tool_input.text}")
+
+
+async def test_retries_on_rate_limit():
+    """Tool that raises RateLimitError is retried up to 3 times."""
+    registry = ToolRegistry()
+    flaky = _Flaky()
+    registry.register(flaky)
+    engine = ToolExecutionEngine(registry)
+
+    result = await engine.execute("flaky", _In(text="hello"))
+    assert result.output.text == "success:hello"
+    assert flaky._calls == 3
+
+
+class _AlwaysFail(BaseTool[_In, _Out]):
+    """Tool that always fails with a non-retryable error."""
+    name = "always_fail"
+    description = "always fails"
+    permissions = ToolPermissions(risk_level=RiskLevel.LOW, requires_approval=False)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._calls = 0
+
+    async def execute(self, tool_input: _In) -> _Out:
+        self._calls += 1
+        raise AuthenticationError("bad credentials")
+
+
+async def test_no_retry_on_auth_error():
+    """Non-retryable errors are not retried.
+
+    Note: The outer execute() method wraps non-ToolError exceptions in ToolError,
+    so we expect ToolError here. The key assertion is that _calls == 1,
+    proving the retry decorator did NOT retry.
+    """
+    registry = ToolRegistry()
+    always_fail = _AlwaysFail()
+    registry.register(always_fail)
+    engine = ToolExecutionEngine(registry)
+
+    with pytest.raises(ToolError):
+        await engine.execute("always_fail", _In(text="x"))
+    assert always_fail._calls == 1
