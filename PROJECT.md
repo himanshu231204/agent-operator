@@ -92,7 +92,7 @@ A crash between publish and ack must not create a duplicate post.
   USER (natural language)
        │
        ▼
-  API / CLI  (FastAPI)
+  API / CLI  (FastAPI / Click)
        │
        ▼
   Orchestrator Graph  (LangGraph StateGraph)
@@ -106,7 +106,7 @@ A crash between publish and ack must not create a duplicate post.
        └─── Verification subgraph (create_react_agent, verify tools)
                    │
                    ▼
-          ToolExecutionEngine  (permission checks, audit logging)
+          ToolExecutionEngine  (permission checks, rate limiting, audit logging)
                    │
                    ▼
           BaseTool implementations
@@ -142,6 +142,8 @@ Browser — Playwright + Chromium (controlled through agent tools, never raw Pla
 Infrastructure — Docker, Docker Compose, configurable object storage where required
 
 Testing — pytest, pytest-asyncio
+
+CLI — Click for operator commands (approve, cancel, audit, create, track)
 
 ---
 
@@ -238,7 +240,7 @@ Consumption:
 - By importing the compiled subgraph from skills/<name>/graph.py
 
 Skills are composable:
-  web-research + content-generation + fact-checking + x-publishing
+  web-research + content-generation + fact-checking + x_publishing
   →  Research → Draft → Fact Check → Approval → Publish
 
 ---
@@ -379,6 +381,8 @@ Ephemeral coordination (task queuing, locking) uses PostgreSQL
 - Respect provider, website, and social API rate limits.
 - Apply concurrency limits.
 - Use timeouts for network, model, and browser operations.
+- Recover browser sessions when safely possible.
+- Escalate authentication failures to the user.
 - Persist enough state to resume interrupted workflows.
 
 ---
@@ -424,6 +428,7 @@ Runs:     GET /tasks/{id}/runs   GET /runs/{run_id}
 Browser:  POST /browser/sessions   GET|DELETE /browser/sessions/{id}
 Content:  POST /content/drafts   GET /content/drafts/{id}
 Social:   POST /social/x/publish   POST /social/linkedin/publish
+Audit:    GET /audit/secrets
 
 ---
 
@@ -442,36 +447,62 @@ agent-operator/
 │   │   │   ├── content.py           # create_react_agent subgraph
 │   │   │   ├── fact_checker.py      # create_react_agent subgraph
 │   │   │   ├── social.py            # create_react_agent subgraph
-│   │   │   └── verification.py      # create_react_agent subgraph
-│   │   ├── callbacks.py             # BaseCallbackHandler for tracing / LangSmith
+│   │   │   ├── verification.py      # create_react_agent subgraph
+│   │   │   └── _helpers.py          # RoutingCriteria constants, collect_tools, resolve_model
+│   │   ├── callbacks.py             # OperatorCallbackHandler (BaseCallbackHandler)
 │   │   └── recovery_agent.py        # Deterministic retry/escalate/fail
 │   │
 │   ├── tools/
 │   │   ├── base.py                  # BaseTool[Input, Output], ToolPermissions
-│   │   ├── executor.py              # ToolExecutionEngine (permission + audit)
+│   │   ├── executor.py              # ToolExecutionEngine (permission + audit + rate limit + retry)
 │   │   ├── registry.py              # ToolRegistry
 │   │   ├── langchain_adapter.py     # BaseTool → StructuredTool via engine
+│   │   ├── factory.py               # build_registry(), build_tool_engine()
 │   │   └── builtin/
 │   │       ├── search.py            # TavilySearchResults wrapper
-│   │       ├── fetch.py             # WebFetchTool
+│   │       ├── langsearch.py        # LangSearch secondary search
+│   │       ├── fetch.py             # WebFetchTool (SSRF-protected)
 │   │       ├── browser_toolkit.py   # PlaywrightBrowserToolkit wrapper
-│   │       └── ...
+│   │       ├── filesystem.py        # File/folder tools
+│   │       ├── shell.py             # ShellRunTool
+│   │       ├── fact_check.py        # FactCheckTool
+│   │       ├── content.py           # ContentDraftTool, ContentValidateTool
+│   │       ├── social_publish.py    # XPublishTool, LinkedInPublishTool
+│   │       └── social_verify.py     # SocialVerifyTool
 │   │
 │   ├── api/
 │   │   ├── router.py
+│   │   ├── deps.py                  # FastAPI dependency providers
 │   │   └── routes/
-│   │       ├── tasks.py, approvals.py, browser.py, content.py, social.py, health.py
+│   │       ├── tasks.py
+│   │       ├── approvals.py
+│   │       ├── browser.py
+│   │       ├── content.py
+│   │       ├── social.py
+│   │       ├── audit.py
+│   │       └── health.py
 │   │
 │   ├── browser/
 │   │   ├── session.py               # BrowserSessionManager
 │   │   └── selectors.py
 │   │
 │   ├── content/
-│   │   ├── generator.py
-│   │   └── validators.py
+│   │   ├── generator.py             # LLMContentGenerator
+│   │   ├── tone_safety.py           # ToneSafetyChecker (LLM-backed)
+│   │   └── validators.py            # Deterministic validators
 │   │
 │   ├── db/
-│   │   ├── models/                  # task, agent_run, tool_call, approval, draft, ...
+│   │   ├── models/
+│   │   │   ├── task.py              # Task, TaskStep
+│   │   │   ├── agent_run.py         # AgentRun
+│   │   │   ├── approval.py          # Approval
+│   │   │   ├── tool_call.py         # ToolCall (audit)
+│   │   │   ├── browser_session.py   # BrowserSession
+│   │   │   ├── research.py          # ResearchSource, ResearchClaim
+│   │   │   ├── draft.py             # Draft
+│   │   │   ├── social_post.py       # SocialPost, PublishAttempt
+│   │   │   ├── verification.py      # VerificationResult
+│   │   │   └── user.py              # User
 │   │   ├── session.py
 │   │   └── base.py
 │   │
@@ -487,17 +518,37 @@ agent-operator/
 │   │       └── registry.py
 │   │
 │   ├── policies/
-│   │   ├── approval.py
-│   │   └── risk.py
+│   │   ├── approval.py              # Approval policies
+│   │   ├── risk.py                  # RiskLevel, ToolPermissions
+│   │   └── rate_limit.py            # RateLimiter (token bucket)
 │   │
 │   ├── research/
-│   │   ├── pipeline.py
-│   │   └── evidence.py
+│   │   ├── pipeline.py              # DefaultResearchPipeline
+│   │   ├── classification.py        # Source classification + freshness
+│   │   └── evidence.py              # Evidence helpers
 │   │
 │   ├── schemas/                     # Pydantic request/response schemas
-│   ├── services/                    # task_service, approval_service, ...
-│   ├── social/                      # X + LinkedIn adapters
-│   ├── workers/                     # Background task runner
+│   │   ├── approval.py
+│   │   ├── audit.py
+│   │   ├── browser.py
+│   │   ├── content.py
+│   │   ├── research.py
+│   │   ├── social.py
+│   │   └── task.py
+│   │
+│   ├── services/
+│   │   ├── task_service.py
+│   │   ├── approval_service.py
+│   │   └── audit_service.py         # Secrets audit (regex scan + redaction)
+│   │
+│   ├── social/
+│   │   ├── base.py                  # SocialPlatform protocol
+│   │   ├── x_adapter.py             # X/Twitter OAuth2 + API v2
+│   │   └── linkedin_adapter.py      # LinkedIn REST API
+│   │
+│   ├── workers/
+│   │   └── task_worker.py           # Background worker (SKIP LOCKED polling)
+│   │
 │   ├── config.py
 │   ├── errors.py
 │   ├── logging.py
@@ -505,8 +556,8 @@ agent-operator/
 │
 ├── skills/
 │   ├── web-research/
-│   │   ├── graph.py                 # Compiled LangGraph subgraph
-│   │   └── SKILL.md                 # Contract: inputs, outputs, tools, permissions
+│   │   ├── graph.py
+│   │   └── SKILL.md
 │   ├── browser-control/
 │   │   ├── graph.py
 │   │   └── SKILL.md
@@ -516,70 +567,84 @@ agent-operator/
 │   ├── fact-checking/
 │   │   ├── graph.py
 │   │   └── SKILL.md
-│   ├── x-publishing/
+│   ├── x_publishing/
 │   │   ├── graph.py
 │   │   └── SKILL.md
-│   └── linkedin-publishing/
-│       ├── graph.py
-│       └── SKILL.md
+│   ├── linkedin_publishing/
+│   │   ├── graph.py
+│   │   └── SKILL.md
+│   ├── local-system/
+│   │   └── graph.py
+│   └── packager.py                  # Skill validation + manifest export
 │
 ├── migrations/
 │
 ├── tests/
 │   ├── unit/
 │   ├── integration/
+│   ├── e2e/
 │   ├── browser/
-│   └── e2e/
+│   └── fixtures/                    # Adversarial web content payloads
 │
 ├── examples/
 ├── docs/
+│
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml                   # ruff + pytest
+│   │   └── test.yml
+│   └── PULL_REQUEST_TEMPLATE.md
 │
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
 ├── alembic.ini
 ├── .env.example
+├── .gitignore
 ├── README.md
+├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md
+├── LICENSE
 ├── PROJECT.md
 ├── AGENTS.md
-└── TODO.md
+└── cli.py                           # Click CLI (approve/cancel/audit/create/track)
 
 ---
 
-24. MVP Phases
+24. MVP Phases — All Complete
 
 Phase 1 — Foundation ✅
   Python project, FastAPI, config, logging, PostgreSQL, migrations, Docker.
 
-Phase 2 — Agent Core ✅ (foundation); LangGraph wiring in progress
+Phase 2 — Agent Core ✅
   LangGraph StateGraph orchestrator, model router (LiteLLM), tool execution engine
   (permission-checked, audited), planner with structured output, PostgresSaver
   checkpointing, BaseCallbackHandler middleware, HITL approval pauses (NodeInterrupt),
   context-quarantine subgraph pattern, cost/usage hooks.
 
-Phase 3 — Browser
+Phase 3 — Browser ✅
   PlaywrightBrowserToolkit integration, browser session pooling, structured page
   observation, select/scroll/wait/download actions, browser error recovery,
   session isolation, browser tests against controlled local pages.
 
-Phase 4 — Research
+Phase 4 — Research ✅
   Search integration (Tavily), WebFetchTool with SSRF protection, ResearchPipeline
   (search → extract → cross-check → synthesise), source classification, freshness
   weighting, fact-checking subgraph, prompt-injection test fixtures.
 
-Phase 5 — Content
+Phase 5 — Content ✅
   ContentGenerator (model-router-backed, platform-aware), tone/safety LLM check,
   X thread support, draft editing endpoint.
 
-Phase 6 — Social
+Phase 6 — Social ✅
   X OAuth2 + API v2, LinkedIn API, publish verification, idempotency enforcement,
   PublishAttempt audit rows, end-to-end mock test (draft → approve → publish → verify).
 
-Phase 7 — Safety
+Phase 7 — Safety ✅
   Approval UI/CLI surface, end-to-end permission enforcement, secrets audit,
   task cancellation (in-flight stop), per-task timeouts, in-process rate limiting.
 
-Phase 8 — Production Hardening
+Phase 8 — Production Hardening ✅
   LangSmith tracing (BaseCallbackHandler), structured retries (tenacity), background
   worker, CLI, full test pyramid, deployment documentation, skills packaging.
 
