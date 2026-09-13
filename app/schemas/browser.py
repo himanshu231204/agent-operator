@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -39,7 +39,7 @@ class BrowserActionResult(BaseModel):
     action: BrowserActionType
     target: str | None = None
     url: str | None = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     details: dict[str, Any] = Field(default_factory=dict)
 
 

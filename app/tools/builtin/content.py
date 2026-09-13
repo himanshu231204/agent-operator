@@ -15,6 +15,7 @@ from app.schemas.content import (
     ContentDraftToolOutput,
     ContentValidateToolInput,
     ContentValidateToolOutput,
+    ContentValidationIssue,
     ThreadPost,
 )
 from app.tools.base import BaseTool, ToolPermissions
@@ -75,7 +76,7 @@ class ContentDraftTool(BaseTool[ContentDraftToolInput, ContentDraftToolOutput]):
         requires_approval=False,
     )
 
-    def __init__(self, *, tone_checker: "ToneSafetyChecker | None" = None) -> None:
+    def __init__(self, *, tone_checker: ToneSafetyChecker | None = None) -> None:
         super().__init__()
         self._tone_checker = tone_checker
 
@@ -130,7 +131,7 @@ class ContentValidateTool(BaseTool[ContentValidateToolInput, ContentValidateTool
     )
     timeout_seconds: ClassVar[float] = 5.0
 
-    def __init__(self, *, tone_checker: "ToneSafetyChecker | None" = None) -> None:
+    def __init__(self, *, tone_checker: ToneSafetyChecker | None = None) -> None:
         super().__init__()
         self._tone_checker = tone_checker
 

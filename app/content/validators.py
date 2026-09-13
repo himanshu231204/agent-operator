@@ -13,7 +13,12 @@ import hashlib
 import re
 from typing import TYPE_CHECKING
 
-from app.schemas.content import ContentValidationIssue, ContentValidationResult, Platform, TonePreference
+from app.schemas.content import (
+    ContentValidationIssue,
+    ContentValidationResult,
+    Platform,
+    TonePreference,
+)
 
 if TYPE_CHECKING:
     from app.content.tone_safety import ToneSafetyChecker
@@ -65,7 +70,7 @@ async def validate_content_async(
     *,
     existing_hashes: set[str] | None = None,
     tone: TonePreference | None = None,
-    tone_checker: "ToneSafetyChecker | None" = None,
+    tone_checker: ToneSafetyChecker | None = None,
 ) -> ContentValidationResult:
     """Run deterministic checks plus optional LLM-backed tone/safety check."""
     issues: list[ContentValidationIssue] = []

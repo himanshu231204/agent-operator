@@ -9,7 +9,6 @@ a thin, model-router-backed checker that returns a list of
 from __future__ import annotations
 
 import json
-from typing import ClassVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
