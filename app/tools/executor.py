@@ -27,6 +27,7 @@ from app.db.models.agent_run import ToolCall
 from app.errors import ApprovalRequiredError, AuthenticationError, ToolError
 from app.logging import get_logger
 from app.policies.approval import requires_approval
+from app.policies.rate_limit import RateLimiter
 from app.policies.risk import RiskLevel
 from app.tools.base import BaseTool
 from app.tools.registry import ToolRegistry
@@ -65,9 +66,11 @@ class ToolExecutionEngine:
         self,
         registry: ToolRegistry,
         session: AsyncSession | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._registry = registry
         self._session = session
+        self._rate_limiter = rate_limiter or RateLimiter()
 
     async def execute(
         self,
@@ -79,6 +82,11 @@ class ToolExecutionEngine:
         ctx = context or ExecutionContext()
         tool = self._registry.get(tool_name)
         self._enforce_permissions(tool, ctx)
+        if not self._rate_limiter.acquire(tool_name):
+            raise RateLimitError(
+                f"Tool {tool_name!r} rate limit exceeded",
+                context={"tool_name": tool_name},
+            )
 
         tool_call = await self._start_tool_call(tool, ctx, tool_input)
         started = time.monotonic()

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from app.browser.session import BrowserSessionManager
 
-from app.config import ModelRoutingSettings, SocialSettings
+from app.config import LimitSettings, ModelRoutingSettings, SocialSettings
 from app.content.tone_safety import ToneSafetyChecker
 from app.llm.router import ModelRouter
 from app.tools.builtin.content import ContentDraftTool, ContentValidateTool
@@ -35,6 +35,7 @@ from app.tools.builtin.shell import ShellRunTool
 from app.tools.builtin.social_publish import LinkedInPublishTool, XPublishTool
 from app.tools.builtin.social_verify import SocialVerifyTool
 from app.tools.executor import ToolExecutionEngine
+from app.policies.rate_limit import RateLimiter
 from app.tools.registry import ToolRegistry
 
 
@@ -134,7 +135,9 @@ def build_tool_engine(registry: ToolRegistry, session: AsyncSession) -> ToolExec
     permission gate — without this late binding the tool can't be registered
     before the engine exists.
     """
-    engine = ToolExecutionEngine(registry=registry, session=session)
+    limits = LimitSettings()
+    rate_limiter = RateLimiter(requests_per_minute=limits.rate_limit_requests_per_minute)
+    engine = ToolExecutionEngine(registry=registry, session=session, rate_limiter=rate_limiter)
     social = _social_settings()
     for tool in registry.list_tools():
         dep = registry.get(tool)

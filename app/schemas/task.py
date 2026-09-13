@@ -14,6 +14,7 @@ from app.domain.state_machine import TaskState
 class TaskCreateRequest(BaseModel):
     instruction: str = Field(min_length=1, max_length=8000)
     user_id: str | None = None
+    timeout_seconds: int | None = Field(default=None, ge=1, le=3600, description="Per-task execution timeout in seconds (max 1 hour)")
 
 
 class TaskRead(BaseModel):

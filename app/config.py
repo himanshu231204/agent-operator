@@ -164,6 +164,7 @@ class LimitSettings(BaseSettings):
     max_execution_seconds: int = 900
     max_retries: int = 3
     max_research_sources: int = 15
+    rate_limit_requests_per_minute: int = 60
 
 
 class Settings(BaseSettings):
