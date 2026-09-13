@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -68,7 +68,7 @@ class TestXPublishTool:
         # Mock existing social post
         existing_post = MagicMock()
         existing_post.external_id = "existing-tweet-id"
-        existing_post.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        existing_post.created_at = datetime(2024, 1, 1, tzinfo=UTC)
         mock_session.execute.return_value = _mock_execute(existing_post)
 
         tool = XPublishTool(session=mock_session, access_token="test-token")
@@ -194,7 +194,7 @@ class TestLinkedInPublishTool:
 
         existing_post = MagicMock()
         existing_post.external_id = "urn:li:share:existing"
-        existing_post.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        existing_post.created_at = datetime(2024, 1, 1, tzinfo=UTC)
         mock_session.execute.return_value = _mock_execute(existing_post)
 
         tool = LinkedInPublishTool(session=mock_session, access_token="test-token")

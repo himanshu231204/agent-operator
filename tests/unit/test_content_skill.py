@@ -20,9 +20,10 @@ def engine(registry):
 
 
 def test_content_skill_builds(registry, engine):
+    from skills.content_generation.graph import build_skill
+
     from app.config import ModelRoutingSettings
     from app.llm.router import ModelRouter
-    from skills.content_generation.graph import build_skill
 
     router = ModelRouter(ModelRoutingSettings())
     mock_model = MagicMock()
@@ -35,9 +36,10 @@ def test_content_skill_builds(registry, engine):
 
 
 def test_content_skill_compiles(registry, engine):
+    from skills.content_generation.graph import build_skill
+
     from app.config import ModelRoutingSettings
     from app.llm.router import ModelRouter
-    from skills.content_generation.graph import build_skill
 
     router = ModelRouter(ModelRoutingSettings())
     mock_model = MagicMock()
@@ -51,8 +53,9 @@ def test_content_skill_compiles(registry, engine):
 
 
 def test_content_skill_tools_collected(registry, engine):
-    from app.agents.graphs._helpers import collect_tools
     from skills.content_generation.graph import _TOOL_NAMES
+
+    from app.agents.graphs._helpers import collect_tools
 
     tools = collect_tools(_TOOL_NAMES, engine, registry)
     names = {t.name for t in tools}

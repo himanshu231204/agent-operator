@@ -1,13 +1,11 @@
 """Unit tests for content validators with tone checker integration."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
-import pytest
-
-from app.content.validators import validate_content, validate_content_async
 from app.content.tone_safety import ToneSafetyChecker
-from app.schemas.content import ContentValidationIssue, TonePreference
+from app.content.validators import validate_content, validate_content_async
+from app.schemas.content import ContentValidationIssue
 
 
 def test_validate_content_still_works_without_checker():
