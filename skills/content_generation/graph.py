@@ -51,7 +51,7 @@ def build_skill(
     registry: ToolRegistry,
     *,
     context: ExecutionContext | None = None,
-) -> "CompiledGraph":
+) -> CompiledGraph:
     """Return the compiled content-generation skill subgraph."""
     model = resolve_model(router, CONTENT_CRITERIA)
     tools = collect_tools(_TOOL_NAMES, engine, registry, context=context)
