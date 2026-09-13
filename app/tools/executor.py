@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.agent_run import ToolCall
-from app.errors import ApprovalRequiredError, AuthenticationError, ToolError
+from app.errors import ApprovalRequiredError, AuthenticationError, RateLimitError, ToolError
 from app.logging import get_logger
 from app.policies.approval import requires_approval
 from app.policies.rate_limit import RateLimiter

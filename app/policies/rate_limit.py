@@ -9,7 +9,6 @@ call consumes one token.
 from __future__ import annotations
 
 import time
-from typing import ClassVar
 
 
 class RateLimiter:

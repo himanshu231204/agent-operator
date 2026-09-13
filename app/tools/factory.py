@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from app.config import LimitSettings, ModelRoutingSettings, SocialSettings
 from app.content.tone_safety import ToneSafetyChecker
 from app.llm.router import ModelRouter
+from app.policies.rate_limit import RateLimiter
 from app.tools.builtin.content import ContentDraftTool, ContentValidateTool
 from app.tools.builtin.fact_check import FactCheckTool
 from app.tools.builtin.fetch import WebFetchTool
@@ -35,7 +36,6 @@ from app.tools.builtin.shell import ShellRunTool
 from app.tools.builtin.social_publish import LinkedInPublishTool, XPublishTool
 from app.tools.builtin.social_verify import SocialVerifyTool
 from app.tools.executor import ToolExecutionEngine
-from app.policies.rate_limit import RateLimiter
 from app.tools.registry import ToolRegistry
 
 
