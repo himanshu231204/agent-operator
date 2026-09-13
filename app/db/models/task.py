@@ -30,6 +30,7 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    timeout_seconds: Mapped[int | None] = mapped_column(nullable=True)
 
     steps: Mapped[list[TaskStep]] = relationship(
         back_populates="task", cascade="all, delete-orphan"

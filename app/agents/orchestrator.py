@@ -46,7 +46,7 @@ from app.db.models.agent_run import AgentRun
 from app.db.models.approval import Approval
 from app.db.models.task import Task
 from app.domain.state_machine import TaskState, can_transition
-from app.errors import ApprovalRequiredError
+from app.errors import ApprovalRequiredError, CancellationError
 from app.errors import TimeoutError as OperatorTimeoutError
 from app.logging import get_logger
 from app.policies.approval import build_approval_request
@@ -99,13 +99,18 @@ class Orchestrator:
     session: AsyncSession
     browser_manager: BrowserSessionManager | None = None
     browser_settings: BrowserSettings | None = None
+    cancelled_tasks: set[uuid.UUID] = field(default_factory=set)
+    _task_uuid: uuid.UUID = field(default=None, init=False, repr=False)
+    _task_timeout: int | None = field(default=None, init=False, repr=False)
 
     async def run(self, task_id: str) -> OrchestratorState:
         task_uuid = uuid.UUID(task_id)
+        self._task_uuid = task_uuid
         task_service = TaskService(self.session)
         approval_service = ApprovalService(self.session)
 
         task = await task_service.get_task(task_uuid)
+        self._task_timeout = task.timeout_seconds
         state = OrchestratorState()
 
         current_state = TaskState(task.state)
@@ -361,11 +366,21 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def _check_limits(self, state: OrchestratorState) -> None:
+        # Check for in-flight cancellation first.
+        if self._task_uuid and self._task_uuid in self.cancelled_tasks:
+            raise CancellationError(
+                f"Task {self._task_uuid} was cancelled by user",
+                context={"task_id": str(self._task_uuid)},
+            )
         elapsed = time.monotonic() - state.started_at
-        if elapsed > self.limits.max_execution_seconds:
+        effective_timeout = min(
+            self._task_timeout or self.limits.max_execution_seconds,
+            self.limits.max_execution_seconds,
+        )
+        if elapsed > effective_timeout:
             raise OperatorTimeoutError(
-                f"Task exceeded max_execution_seconds={self.limits.max_execution_seconds}",
-                context={"elapsed": elapsed},
+                f"Task exceeded timeout of {effective_timeout}s",
+                context={"elapsed": elapsed, "timeout": effective_timeout},
             )
         if state.iterations >= self.limits.max_iterations:
             raise OperatorTimeoutError(
