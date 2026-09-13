@@ -222,3 +222,4 @@ __marimo__/
 .codex/
 .opencode/
 .venv-stale
+.hermes/
